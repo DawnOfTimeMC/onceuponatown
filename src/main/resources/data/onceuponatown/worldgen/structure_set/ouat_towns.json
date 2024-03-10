@@ -1,0 +1,14 @@
+{
+  "structures": [
+    {
+      "structure": "onceuponatown:plains_town",
+      "weight": 1
+    }
+  ],
+  "placement": {
+    "type": "minecraft:random_spread",
+    "salt": 10187412,
+    "separation": 8,
+    "spacing": 34
+  }
+}

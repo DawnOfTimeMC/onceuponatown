@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "compatibilityLevel": "JAVA_17",
+  "package": "com.dotteam.onceuponatown.mixin",
+  "mixins": [
+    "DisableVanillaVillagesMixin",
+    "LocateVillageMixin"
+  ]
+}

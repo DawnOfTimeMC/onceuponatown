@@ -1,0 +1,8 @@
+{
+  "type": "onceuponatown:town",
+  "culture": "plains",
+  "biomes": "#onceuponatown:has_structure/plains_town",
+  "spawn_overrides": {},
+  "step": "surface_structures",
+  "terrain_adaptation": "beard_thin"
+}
