@@ -1,0 +1,49 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: eclipse-temurin:25-jdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          key: gradle-${{ hashFiles('build.gradle.kts', 'settings.gradle.kts') }}
+          restore-keys: gradle-
+          path: |
+            .gradle/
+            buildSrc/
+            common/build/
+            !common/build/libs/
+            fabric/build/
+            !fabric/build/libs/
+            forge/build/
+            !forge/build/libs/
+
+      - name: Build the project
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean build
+
+      - name: Upload Fabric JAR
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.event.repository.name }}-fabric-${{ github.sha }}
+          path: fabric/build/libs/*.jar
+
+      - name: Upload Forge JAR
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.event.repository.name }}-forge-${{ github.sha }}
+          path: forge/build/libs/*.jar
