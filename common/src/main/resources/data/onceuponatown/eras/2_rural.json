@@ -4,7 +4,6 @@
   "orientation_label": "Rural",
   "structure_label": "Village",
   "icon_item": "minecraft:wheat_seeds",
-  "max_active_quests": 2,
 
   "min_weight_percent": 90,
   "weight_cap_increase": 10,
@@ -16,9 +15,9 @@
 
   "required_residents": 4,
   "required_buildings": [
-    { "defId": "wheat_field", "count": 2 }
+    { "defId": "wheat_farm", "count": 1 }
   ],
-  "unlocked_building_ids": ["granary", "lone_place"],
+  "unlocked_building_ids": ["granary", "carpenter", "lone_place"],
   "unlock_new_builder": true,
 
   "next_orientation": "rural"

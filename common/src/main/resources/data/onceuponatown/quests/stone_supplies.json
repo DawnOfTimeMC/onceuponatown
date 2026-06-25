@@ -1,0 +1,21 @@
+{
+  "id": "onceuponatown:stone_supplies",
+  "type": "TASK",
+  "title": "quest.onceuponatown.stone_supplies.title",
+  "description": "quest.onceuponatown.stone_supplies.desc",
+  "refresh_interval_ticks": 7000,
+
+  "prerequisites": {
+    "min_era": 0,
+    "max_era": 1,
+    "required_buildings": ["wild_stone"],
+    "stock_conditions": [
+      { "item": "minecraft:cobblestone", "min": 0, "max": 20 }
+    ]
+  },
+
+  "conditions": [
+    { "type": "DELIVERY", "item": "minecraft:cobblestone", "required": 10, "send_to_stock": true }
+  ],
+  "reward": { "type": "PLAYER", "item": "minecraft:emerald", "amount": 2 }
+}

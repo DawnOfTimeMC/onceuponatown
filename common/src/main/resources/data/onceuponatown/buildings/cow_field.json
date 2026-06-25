@@ -4,10 +4,11 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:beef",
   "category": "jobs",
+  "weight": 2,
+
   "herd": 2,
   "consumption_per_herd": 1.0,
   "required_buildings": [
-    { "defId": "pig_field", "count": 1 },
     { "defId": "wheat_field", "count": 1 }
   ],
   "construction_cost": [

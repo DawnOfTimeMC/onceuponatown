@@ -1,6 +1,7 @@
 package org.dawnoftime.onceuponatown.client.screen;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
@@ -25,20 +26,18 @@ import org.dawnoftime.onceuponatown.client.gui.widgets.DraggableWidget;
 import org.dawnoftime.onceuponatown.client.gui.widgets.EraProgressDraggableWidget;
 import org.dawnoftime.onceuponatown.client.gui.widgets.MapDraggableWidget;
 import org.dawnoftime.onceuponatown.client.gui.widgets.NbtPreviewWidget;
-import org.dawnoftime.onceuponatown.client.gui.widgets.QuestDraggableWidget;
+import org.dawnoftime.onceuponatown.client.gui.widgets.QuestHubWidget;
 import org.dawnoftime.onceuponatown.client.gui.widgets.TownSummaryWidget;
 import org.dawnoftime.onceuponatown.network.C2SBuyPacket;
+import org.dawnoftime.onceuponatown.town.TownLogEntry;
 import org.dawnoftime.onceuponatown.network.NetworkHelper;
 import org.dawnoftime.onceuponatown.screen.TownHubMenu;
-import org.dawnoftime.onceuponatown.town.TownLogEntry;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
 
@@ -81,10 +80,11 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
     private static boolean savedMapOpen = true;
     private static boolean savedSummaryOpen = true;
     private static boolean savedEraOpen = false;
+    private static int     savedQuestHubX    = -1;
+    private static int     savedQuestHubY    = -1;
+    private static boolean savedQuestHubOpen = true;
     private static int savedActiveTab = 0;
     private static final List<String> savedWidgetOrder = new ArrayList<>();
-    private static final Map<String, int[]> savedQuestPositions = new HashMap<>();
-    private static final List<String> savedQuestOrder = new ArrayList<>();
 
     private static final float L1_Z_BASE =    0f;
     private static final float L1_Z_STEP =  500f;
@@ -94,7 +94,6 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
     private static final float L3_Z_STEP =  500f;
 
     private final List<DraggableWidget> layer1Widgets = new ArrayList<>();
-    private final List<DraggableWidget> layer3Widgets = new ArrayList<>();
     private boolean mapWidgetCreated = false;
     private int mapInitialHeight = 0;
 
@@ -102,7 +101,9 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
     private boolean mapClosed = false;
     private boolean summaryClosed = false;
     private boolean eraClosed = true;
+    private boolean questHubClosed = false;
     private EraProgressDraggableWidget eraWidget = null;
+    private QuestHubWidget questHubWidget = null;
 
     // Era state parsed from hub data
     private int currentEra = 0;
@@ -113,7 +114,6 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
     private int activeHerd = 0;
     private int currentWeight = 0;
     private int maxWeight = 20;
-    private Map<String, Integer> categoryWeights = new HashMap<>();
     private List<EraProgressDraggableWidget.EraPathOption> eraTransitions = new ArrayList<>();
     private int lastKnownEra = -1;
 
@@ -173,10 +173,11 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                                  String nbtPath,
                                  boolean hasBuilt,
                                  List<String> nbtLevels,
-                                 int builtCount) {}
+                                 int builtCount,
+                                 int weight) {}
     private record CostEntry(String itemId, int amount) {}
     private record ReqBuildingEntry(String defId, int required, int have) {}
-    private record ProductionCell(Item item, int amount) {}
+    private record ProductionCell(Item item, int amount, boolean locked) {}
     private record UpgradeBuildingEntry(String defId, long worldPosLong, int upgradeLevel,
                                         String category, String iconItem) {}
     private record ClientQueueEntry(String type, String defId, long buildingWorldPos) {
@@ -234,6 +235,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                 if (hub.contains("ActivityLog")) {
                     summaryWidget.loadInitialLog(parseActivityLog(hub));
                 }
+                summaryWidget.setOnBroadcastToggled(() -> NetworkHelper.sendToggleChatBroadcastPacket.accept(anchorPos));
                 newWidgets.add(summaryWidget);
             }
             if (savedEraOpen) {
@@ -244,6 +246,17 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                     currentEra, eraTransitions,
                     pathId -> NetworkHelper.sendAdvanceEraPacket.accept(anchorPos, pathId));
                 newWidgets.add(eraWidget);
+            }
+            if (savedQuestHubOpen) {
+                int questH = DraggableWidget.TITLE_BAR_H + QuestHubWidget.VISIBLE_H;
+                int startX = (savedQuestHubX >= 0)
+                    ? Math.min(savedQuestHubX, Math.max(0, freeZoneW - QuestHubWidget.WIDGET_W))
+                    : centerX(freeZoneW, QuestHubWidget.WIDGET_W);
+                int startY = (savedQuestHubY >= 0)
+                    ? Math.min(savedQuestHubY, Math.max(0, this.height - questH))
+                    : centerY(this.height, questH);
+                questHubWidget = new QuestHubWidget(startX, startY, freeZoneW, this.height);
+                newWidgets.add(questHubWidget);
             }
             if (!savedWidgetOrder.isEmpty()) {
                 newWidgets.sort((a, b) -> {
@@ -256,6 +269,11 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
             }
             layer1Widgets.addAll(newWidgets);
             mapWidgetCreated = true;
+            if (hub.contains("Quests") && questHubWidget != null) {
+                List<CompoundTag> tags = new ArrayList<>();
+                hub.getList("Quests", Tag.TAG_COMPOUND).forEach(t -> tags.add((CompoundTag) t));
+                questHubWidget.setQuests(tags, anchorPos);
+            }
         }
     }
 
@@ -272,11 +290,6 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         activeHerd      = hub.getInt("ActiveHerd");
         currentWeight  = hub.getInt("CurrentWeight");
         maxWeight      = hub.getInt("MaxWeight");
-        categoryWeights.clear();
-        if (hub.contains("CategoryWeights")) {
-            net.minecraft.nbt.CompoundTag cw = hub.getCompound("CategoryWeights");
-            for (String key : cw.getAllKeys()) categoryWeights.put(key, cw.getInt(key));
-        }
         eraTransitions = parseEraTransitions(hub);
 
         constructionQueueClient.clear();
@@ -288,114 +301,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
             constructionQueueClient.add(new ClientQueueEntry(type, defId, worldPos));
         });
 
-        buildingCatalog.clear();
-        hub.getList("BuildingCatalog", Tag.TAG_COMPOUND).forEach(raw -> {
-            CompoundTag dt = (CompoundTag) raw;
-            String id = dt.getString("Id");
-            String category = dt.getString("Category");
-            String iconItem = dt.getString("IconItem");
-            List<CostEntry> cost = new ArrayList<>();
-            dt.getList("ConstructionCost", Tag.TAG_COMPOUND)
-                .forEach(cr -> {
-                    CompoundTag ct = (CompoundTag) cr;
-                    cost.add(new CostEntry(ct.getString("Item"), ct.getInt("Amount")));
-                });
-
-            List<BuildingProductionTooltip.Row> productionRows = new ArrayList<>();
-            List<ProductionCell> productionCells = new ArrayList<>();
-            ListTag prod = dt.getList("Production", Tag.TAG_COMPOUND);
-            if (!prod.isEmpty()) {
-                productionRows.add(new BuildingProductionTooltip.Row(null,
-                    Component.translatable("onceuponatown.tooltip.produces")));
-                for (Tag t : prod) {
-                    CompoundTag pt = (CompoundTag) t;
-                    String itemId = pt.getString("Item");
-                    int amount    = pt.getInt("Amount");
-                    int seconds   = pt.getInt("EveryTicks") / 20;
-                    Item item     = BuiltInRegistries.ITEM.get(new ResourceLocation(itemId));
-                    MutableComponent text = Component.literal("x" + amount + " ")
-                        .append(Component.translatable(item.getDescriptionId()))
-                        .append(Component.literal(" / " + seconds + "s"))
-                        .withStyle(ChatFormatting.GRAY);
-                    productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(item), text));
-                    productionCells.add(new ProductionCell(item, amount));
-                }
-            }
-            ListTag transforms = dt.getList("Transformations", Tag.TAG_COMPOUND);
-            if (!transforms.isEmpty()) {
-                productionRows.add(new BuildingProductionTooltip.Row(null,
-                    Component.translatable("onceuponatown.tooltip.transforms")));
-                for (Tag t : transforms) {
-                    CompoundTag tt = (CompoundTag) t;
-                    String outputId   = tt.getString("OutputItem");
-                    int outputAmount  = tt.getInt("OutputAmount");
-                    int seconds       = tt.getInt("EveryTicks") / 20;
-                    Item outputItem   = BuiltInRegistries.ITEM.get(new ResourceLocation(outputId));
-                    MutableComponent text = Component.literal("x" + outputAmount + " ")
-                        .append(Component.translatable(outputItem.getDescriptionId()))
-                        .append(Component.literal(" / " + seconds + "s"))
-                        .withStyle(ChatFormatting.GRAY);
-                    productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(outputItem), text));
-                    productionCells.add(new ProductionCell(outputItem, outputAmount));
-                }
-            }
-            double productionBonus = dt.getDouble("ProductionBonus");
-            if (productionBonus > 0) {
-                productionRows.add(new BuildingProductionTooltip.Row(null,
-                    Component.translatable("onceuponatown.tooltip.perks")));
-                int percent = (int) Math.round(productionBonus * 100);
-                productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(Items.NETHER_STAR),
-                    Component.translatable("onceuponatown.tooltip.production_bonus", percent)
-                        .withStyle(ChatFormatting.GRAY)));
-                productionCells.add(new ProductionCell(Items.NETHER_STAR, percent));
-            }
-            int residents = dt.getInt("Residents");
-            if (residents > 0) {
-                productionRows.add(new BuildingProductionTooltip.Row(null,
-                    Component.translatable("onceuponatown.tooltip.adds")));
-                net.minecraft.world.item.Item villagerEgg = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
-                    new ResourceLocation("minecraft:villager_spawn_egg"));
-                productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(villagerEgg),
-                    Component.translatable("onceuponatown.tooltip.residents", residents)
-                        .withStyle(ChatFormatting.GRAY)));
-                productionCells.add(new ProductionCell(villagerEgg, residents));
-            }
-            int herd = dt.getInt("Herd");
-            if (herd > 0) {
-                if (residents == 0) {
-                    productionRows.add(new BuildingProductionTooltip.Row(null,
-                        Component.translatable("onceuponatown.tooltip.adds")));
-                }
-                Item pigEgg = BuiltInRegistries.ITEM.get(new ResourceLocation("minecraft:pig_spawn_egg"));
-                productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(pigEgg),
-                    Component.translatable("onceuponatown.tooltip.herd", herd)
-                        .withStyle(ChatFormatting.GRAY)));
-                productionCells.add(new ProductionCell(pigEgg, herd));
-            }
-
-            int requiredResidents = dt.getInt("RequiredResidents");
-            List<ReqBuildingEntry> requiredBuildings = new ArrayList<>();
-            dt.getList("RequiredBuildings", Tag.TAG_COMPOUND).forEach(rt -> {
-                CompoundTag req = (CompoundTag) rt;
-                requiredBuildings.add(new ReqBuildingEntry(
-                    req.getString("DefId"), req.getInt("Count"), req.getInt("Have")));
-            });
-
-            float baseConsumption = dt.getFloat("BaseConsumptionPerResident");
-            float maxConsumption  = dt.getFloat("MaxConsumptionPerResident");
-            int maxResidents      = dt.getInt("MaxResidents");
-            boolean nextEra       = dt.getBoolean("NextEra");
-            String nbtPath        = dt.getString("Nbt");
-            boolean hasBuilt      = dt.getBoolean("HasBuilt");
-            int builtCount        = dt.getInt("BuiltCount");
-            List<String> nbtLevels = new ArrayList<>();
-            dt.getList("NbtLevels", Tag.TAG_STRING).forEach(t -> nbtLevels.add(t.getAsString()));
-
-            buildingCatalog.add(new BuildingEntry(id, category, iconItem, cost, productionRows,
-                productionCells, requiredResidents, requiredBuildings,
-                productionBonus, baseConsumption, maxConsumption, maxResidents, nextEra,
-                nbtPath, hasBuilt, nbtLevels, builtCount));
-        });
+        parseBuildingCatalog(hub);
 
         stockSnapshot.clear();
         CompoundTag stockTag = hub.getCompound("StockSnapshot");
@@ -442,77 +348,13 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         }
         lastKnownEra = currentEra;
 
-        // Sync quest cards: add/update/remove based on what the hub packet contains
-        List<CompoundTag> questTagList = new ArrayList<>();
-        hub.getList("Quests", Tag.TAG_COMPOUND).forEach(t -> questTagList.add((CompoundTag) t));
-        syncQuestWidgets(questTagList);
-    }
-
-    private void syncQuestWidgets(List<CompoundTag> questTags) {
-        Set<String> incomingIds = new HashSet<>();
-        for (CompoundTag qt : questTags) incomingIds.add(qt.getString("QuestId"));
-
-        // Remove widgets for quests that are gone (claimed or expired), save their positions
-        layer3Widgets.removeIf(w -> {
-            if (w instanceof QuestDraggableWidget qw && !incomingIds.contains(qw.getQuestId())) {
-                savedQuestPositions.put(qw.getQuestId(), new int[]{ qw.getX(), qw.getY() });
-                return true;
-            }
-            return false;
-        });
-
-        // Collect IDs of quest widgets already present
-        Set<String> existingIds = new HashSet<>();
-        for (DraggableWidget w : layer3Widgets) {
-            if (w instanceof QuestDraggableWidget qw) existingIds.add(qw.getQuestId());
+        if (questHubWidget != null) {
+            List<CompoundTag> questTagList = new ArrayList<>();
+            hub.getList("Quests", Tag.TAG_COMPOUND).forEach(t -> questTagList.add((CompoundTag) t));
+            questHubWidget.setQuests(questTagList, anchorPos);
         }
 
-        // Update existing widgets; collect new ones for ordered insertion
-        List<QuestDraggableWidget> newQuests = new ArrayList<>();
-        int questIdx = 0;
-        for (CompoundTag qt : questTags) {
-            String questId = qt.getString("QuestId");
-            if (existingIds.contains(questId)) {
-                for (DraggableWidget w : layer3Widgets) {
-                    if (w instanceof QuestDraggableWidget qw && qw.getQuestId().equals(questId)) {
-                        qw.update(qt);
-                        break;
-                    }
-                }
-            } else {
-                int[] pos = savedQuestPositions.get(questId);
-                int startX, startY;
-                if (pos != null) {
-                    startX = pos[0];
-                    startY = pos[1];
-                } else {
-                    int maxX = Math.max(1, leftPos - QuestDraggableWidget.WIDGET_W - 10);
-                    int maxY = Math.max(1, height - 80);
-                    startX = (int)(Math.random() * maxX);
-                    startY = (int)(Math.random() * maxY);
-                }
-                QuestDraggableWidget qw = new QuestDraggableWidget(qt,
-                    id -> NetworkHelper.sendClaimQuestPacket.accept(anchorPos, id),
-                    startX, startY, leftPos, height);
-                qw.setMoveCallback(() -> savedQuestPositions.put(qw.getQuestId(), new int[]{ qw.getX(), qw.getY() }));
-                qw.setDeliveryCallback((condIdx, amount) ->
-                    NetworkHelper.sendQuestDeliverPacket.send(anchorPos, qw.getQuestId(), condIdx, amount));
-                newQuests.add(qw);
-            }
-            questIdx++;
-        }
-
-        // Restore saved z-order for newly added quests
-        if (!savedQuestOrder.isEmpty() && !newQuests.isEmpty()) {
-            newQuests.sort((a, b) -> {
-                int ia = savedQuestOrder.indexOf(a.getQuestId());
-                int ib = savedQuestOrder.indexOf(b.getQuestId());
-                if (ia < 0) ia = Integer.MAX_VALUE;
-                if (ib < 0) ib = Integer.MAX_VALUE;
-                return Integer.compare(ia, ib);
-            });
-        }
-        layer3Widgets.addAll(newQuests);
+        TownSummaryWidget.chatBroadcastEnabled = hub.getBoolean("ChatSubscribed");
     }
 
     @Override
@@ -585,14 +427,21 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                     savedEraOpen = false;
                     eraWidget = null;
                 }
+                if (w instanceof QuestHubWidget) {
+                    savedQuestHubX    = w.getX();
+                    savedQuestHubY    = w.getY();
+                    savedQuestHubOpen = false;
+                    questHubWidget = null;
+                }
             }
             return w.isClosed();
         });
-        mapClosed     = layer1Widgets.stream().noneMatch(w -> w instanceof MapDraggableWidget);
-        summaryClosed = layer1Widgets.stream().noneMatch(w -> w instanceof TownSummaryWidget);
-        eraClosed     = layer1Widgets.stream().noneMatch(w -> w instanceof EraProgressDraggableWidget);
+        mapClosed       = layer1Widgets.stream().noneMatch(w -> w instanceof MapDraggableWidget);
+        summaryClosed   = layer1Widgets.stream().noneMatch(w -> w instanceof TownSummaryWidget);
+        eraClosed       = layer1Widgets.stream().noneMatch(w -> w instanceof EraProgressDraggableWidget);
+        questHubClosed  = layer1Widgets.stream().noneMatch(w -> w instanceof QuestHubWidget);
 
-        // Layer 1: left draggable widgets (Map, Summary, Era, Production popup)
+        // Layer 1: left draggable widgets (Map, Summary, Era, QuestHub)
         for (int i = 0; i < layer1Widgets.size(); i++) {
             guiGraphics.pose().pushPose();
             guiGraphics.pose().translate(0, 0, L1_Z_BASE + i * L1_Z_STEP);
@@ -620,17 +469,9 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         }
         guiGraphics.pose().popPose();
 
-        // Layer 3: quest cards -- always above the right panel
-        for (int i = 0; i < layer3Widgets.size(); i++) {
-            guiGraphics.pose().pushPose();
-            guiGraphics.pose().translate(0, 0, L3_Z_BASE + i * L3_Z_STEP);
-            layer3Widgets.get(i).render(guiGraphics, mouseX, mouseY, partialTick);
-            guiGraphics.pose().popPose();
-        }
-
         // Tooltips above everything
         guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(0, 0, L3_Z_BASE + (layer3Widgets.size() + 1) * L3_Z_STEP);
+        guiGraphics.pose().translate(0, 0, L3_Z_BASE + L3_Z_STEP);
         if (activeTab == 1) {
             renderConstructionTooltips(guiGraphics, mouseX, mouseY);
         } else if (activeTab == 2) {
@@ -644,7 +485,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         // Expanded NBT view: fullscreen overlay above everything
         if (expandedViewOpen) {
             guiGraphics.pose().pushPose();
-            guiGraphics.pose().translate(0, 0, L3_Z_BASE + (layer3Widgets.size() + 5) * L3_Z_STEP);
+            guiGraphics.pose().translate(0, 0, L3_Z_BASE + 5 * L3_Z_STEP);
             renderExpandedView(guiGraphics, mouseX, mouseY);
             guiGraphics.pose().popPose();
         }
@@ -662,6 +503,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         }
         if (cachedHubData != null) cachedHubData.put("StockSnapshot", stockTag);
         this.menu.rebuildFromStock(stockTag);
+        refreshEraWidgetFromStock();
     }
 
     private void applyBuildingListUpdate(CompoundTag data) {
@@ -698,12 +540,26 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                 ubt.getString("IconItem")
             ));
         });
+
+        // Sync weight and building prerequisite counts in the era widget
+        if (data.contains("CurrentWeight")) {
+            currentWeight = data.getInt("CurrentWeight");
+            maxWeight = data.getInt("MaxWeight");
+            refreshEraWidgetFromWeight();
+        }
+        if (data.contains("BuildingCounts")) {
+            refreshEraWidgetFromBuildingCounts(data.getCompound("BuildingCounts"));
+        }
     }
 
     private void applyQuestUpdate(CompoundTag data) {
-        List<CompoundTag> questTagList = new ArrayList<>();
-        data.getList("Quests", Tag.TAG_COMPOUND).forEach(t -> questTagList.add((CompoundTag) t));
-        syncQuestWidgets(questTagList);
+        BlockPos packetAnchor = NbtUtils.readBlockPos(data.getCompound("AnchorPos"));
+        if (!anchorPos.equals(packetAnchor)) return;
+        if (questHubWidget != null) {
+            List<CompoundTag> tags = new ArrayList<>();
+            data.getList("Quests", Tag.TAG_COMPOUND).forEach(t -> tags.add((CompoundTag) t));
+            questHubWidget.setQuests(tags, anchorPos);
+        }
     }
 
     private void applyEraUpdate(CompoundTag data) {
@@ -713,6 +569,12 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         maxWeight      = data.getInt("MaxWeight");
         eraTransitions = parseEraTransitions(data);
         if (eraWidget != null) eraWidget.updateData(currentEra, eraTransitions);
+        if (data.contains("BuildingCatalog")) {
+            parseBuildingCatalog(data);
+            catalogScrollOffset = 0;
+            selectedCatalogBuildingId = null;
+            constructionPreview = null;
+        }
         if (lastKnownEra >= 0 && currentEra > prevEra) {
             var mc = net.minecraft.client.Minecraft.getInstance();
             if (mc.level != null && mc.player != null) {
@@ -755,6 +617,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                 break;
             }
         }
+        if (eraWidget != null) eraWidget.updateResidents(activeResidents);
     }
 
     private List<TownLogEntry> parseActivityLog(CompoundTag hub) {
@@ -785,6 +648,123 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                 break;
             }
         }
+    }
+
+    private void parseBuildingCatalog(CompoundTag hub) {
+        buildingCatalog.clear();
+        hub.getList("BuildingCatalog", Tag.TAG_COMPOUND).forEach(raw -> {
+            CompoundTag dt = (CompoundTag) raw;
+            String id = dt.getString("Id");
+            String category = dt.getString("Category");
+            String iconItem = dt.getString("IconItem");
+            List<CostEntry> cost = new ArrayList<>();
+            dt.getList("ConstructionCost", Tag.TAG_COMPOUND)
+                .forEach(cr -> {
+                    CompoundTag ct = (CompoundTag) cr;
+                    cost.add(new CostEntry(ct.getString("Item"), ct.getInt("Amount")));
+                });
+
+            int currentLevel = dt.getInt("CurrentLevel");
+            List<BuildingProductionTooltip.Row> productionRows = new ArrayList<>();
+            List<ProductionCell> productionCells = new ArrayList<>();
+            ListTag prod = dt.getList("Production", Tag.TAG_COMPOUND);
+            if (!prod.isEmpty()) {
+                productionRows.add(new BuildingProductionTooltip.Row(null,
+                    Component.translatable("onceuponatown.tooltip.produces")));
+                for (Tag t : prod) {
+                    CompoundTag pt = (CompoundTag) t;
+                    String itemId     = pt.getString("Item");
+                    int amount        = pt.getInt("Amount");
+                    int seconds       = pt.getInt("EveryTicks") / 20;
+                    int unlockAtLevel = pt.getInt("UnlockAtLevel");
+                    boolean locked    = unlockAtLevel >= 0 && currentLevel < unlockAtLevel;
+                    Item item         = BuiltInRegistries.ITEM.get(new ResourceLocation(itemId));
+                    MutableComponent text = Component.literal("x" + amount + " ")
+                        .append(Component.translatable(item.getDescriptionId()))
+                        .append(Component.literal(" / " + seconds + "s"))
+                        .withStyle(ChatFormatting.GRAY);
+                    productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(item), text, locked));
+                    productionCells.add(new ProductionCell(item, amount, locked));
+                }
+            }
+            ListTag transforms = dt.getList("Transformations", Tag.TAG_COMPOUND);
+            if (!transforms.isEmpty()) {
+                productionRows.add(new BuildingProductionTooltip.Row(null,
+                    Component.translatable("onceuponatown.tooltip.transforms")));
+                for (Tag t : transforms) {
+                    CompoundTag tt = (CompoundTag) t;
+                    String outputId   = tt.getString("OutputItem");
+                    int outputAmount  = tt.getInt("OutputAmount");
+                    int seconds       = tt.getInt("EveryTicks") / 20;
+                    int unlockAtLevel = tt.getInt("UnlockAtLevel");
+                    boolean locked    = unlockAtLevel >= 0 && currentLevel < unlockAtLevel;
+                    Item outputItem   = BuiltInRegistries.ITEM.get(new ResourceLocation(outputId));
+                    MutableComponent text = Component.literal("x" + outputAmount + " ")
+                        .append(Component.translatable(outputItem.getDescriptionId()))
+                        .append(Component.literal(" / " + seconds + "s"))
+                        .withStyle(ChatFormatting.GRAY);
+                    productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(outputItem), text, locked));
+                    productionCells.add(new ProductionCell(outputItem, outputAmount, locked));
+                }
+            }
+            double productionBonus = dt.getDouble("ProductionBonus");
+            if (productionBonus > 0) {
+                productionRows.add(new BuildingProductionTooltip.Row(null,
+                    Component.translatable("onceuponatown.tooltip.perks")));
+                int percent = (int) Math.round(productionBonus * 100);
+                productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(Items.NETHER_STAR),
+                    Component.translatable("onceuponatown.tooltip.production_bonus", percent)
+                        .withStyle(ChatFormatting.GRAY)));
+                productionCells.add(new ProductionCell(Items.NETHER_STAR, percent, false));
+            }
+            int residents = dt.getInt("Residents");
+            if (residents > 0) {
+                productionRows.add(new BuildingProductionTooltip.Row(null,
+                    Component.translatable("onceuponatown.tooltip.adds")));
+                net.minecraft.world.item.Item villagerEgg = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
+                    new ResourceLocation("minecraft:villager_spawn_egg"));
+                productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(villagerEgg),
+                    Component.translatable("onceuponatown.tooltip.residents", residents)
+                        .withStyle(ChatFormatting.GRAY)));
+                productionCells.add(new ProductionCell(villagerEgg, residents, false));
+            }
+            int herd = dt.getInt("Herd");
+            if (herd > 0) {
+                if (residents == 0) {
+                    productionRows.add(new BuildingProductionTooltip.Row(null,
+                        Component.translatable("onceuponatown.tooltip.adds")));
+                }
+                Item pigEgg = BuiltInRegistries.ITEM.get(new ResourceLocation("minecraft:pig_spawn_egg"));
+                productionRows.add(new BuildingProductionTooltip.Row(new ItemStack(pigEgg),
+                    Component.translatable("onceuponatown.tooltip.herd", herd)
+                        .withStyle(ChatFormatting.GRAY)));
+                productionCells.add(new ProductionCell(pigEgg, herd, false));
+            }
+
+            int requiredResidents = dt.getInt("RequiredResidents");
+            List<ReqBuildingEntry> requiredBuildings = new ArrayList<>();
+            dt.getList("RequiredBuildings", Tag.TAG_COMPOUND).forEach(rt -> {
+                CompoundTag req = (CompoundTag) rt;
+                requiredBuildings.add(new ReqBuildingEntry(
+                    req.getString("DefId"), req.getInt("Count"), req.getInt("Have")));
+            });
+
+            float baseConsumption = dt.getFloat("BaseConsumptionPerResident");
+            float maxConsumption  = dt.getFloat("MaxConsumptionPerResident");
+            int maxResidents      = dt.getInt("MaxResidents");
+            boolean nextEra       = dt.getBoolean("NextEra");
+            String nbtPath        = dt.getString("Nbt");
+            boolean hasBuilt      = dt.getBoolean("HasBuilt");
+            int builtCount        = dt.getInt("BuiltCount");
+            List<String> nbtLevels = new ArrayList<>();
+            dt.getList("NbtLevels", Tag.TAG_STRING).forEach(t -> nbtLevels.add(t.getAsString()));
+            int weight            = dt.contains("Weight") ? dt.getInt("Weight") : 1;
+
+            buildingCatalog.add(new BuildingEntry(id, category, iconItem, cost, productionRows,
+                productionCells, requiredResidents, requiredBuildings,
+                productionBonus, baseConsumption, maxConsumption, maxResidents, nextEra,
+                nbtPath, hasBuilt, nbtLevels, builtCount, weight));
+        });
     }
 
     private void renderTabs(GuiGraphics g, int mx, int my) {
@@ -933,6 +913,12 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                     ItemStack stack = new ItemStack(cell.item(), cell.amount());
                     g.renderFakeItem(stack, colXs[col], rowYs[row]);
                     g.renderItemDecorations(font, stack, colXs[col], rowYs[row]);
+                    if (cell.locked()) {
+                        g.pose().pushPose();
+                        g.pose().translate(0, 0, 200);
+                        NbtPreviewWidget.drawPadlockIcon(g, colXs[col] + 4, rowYs[row] + 3);
+                        g.pose().popPose();
+                    }
                 }
             }
         }
@@ -1000,7 +986,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                 lines.add(Component.literal(req.have() + "/" + req.required() + " " + formatId(req.defId()))
                     .withStyle(s -> s.withColor(met ? 0x55FF55 : 0xFF5555)));
             }
-            int wCost = categoryWeights.getOrDefault(entry.category(), 0);
+            int wCost = entry.weight();
             boolean weightOk = currentWeight + wCost <= maxWeight;
             lines.add(Component.literal(wCost + " weight")
                 .withStyle(s -> s.withColor(weightOk ? 0x55FF55 : 0xFF5555)));
@@ -1021,25 +1007,27 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
             boolean atMax = maxLevel > 0 && sel.upgradeLevel() >= maxLevel;
 
             if (defEntry != null && maxLevel > 0) {
-                boolean canAfford = !atMax && canAffordUpgrade(sel, defEntry);
+                boolean pending = isUpgradePending(sel);
+                boolean canAfford = !atMax && !pending && canAffordUpgrade(sel, defEntry);
 
                 int btnW = 46;
                 int btnX = leftPos + QUEUE_GRID_X + (AVAIL_COLS * CELL) - 2 - btnW;
                 int btnY = topPos + 126;
                 int btnH = 11;
-                boolean btnHover = !atMax && mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + btnH;
+                boolean btnActive = !atMax && !pending;
+                boolean btnHover = btnActive && mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + btnH;
 
                 // Right zone: stat gauges (ghost fill shows next-level delta on button hover)
-                renderUpgradeGaugeBars(g, sel, defEntry, btnHover && !atMax, canAfford);
+                renderUpgradeGaugeBars(g, sel, defEntry, btnHover, canAfford);
 
                 // Unlock row: items unlocked at the next upgrade level
-                if (!atMax) renderUnlockRow(g, mx, my, sel, defEntry);
+                if (!atMax && !pending) renderUnlockRow(g, mx, my, sel, defEntry);
 
                 // Upgrade button
-                int btnColor = atMax ? 0xFF444444 : (canAfford ? (btnHover ? 0xFF55BB55 : 0xFF337733) : 0xFF444444);
+                int btnColor = (atMax || pending) ? 0xFF444444 : (canAfford ? (btnHover ? 0xFF55BB55 : 0xFF337733) : 0xFF444444);
                 g.fill(btnX, btnY, btnX + btnW, btnY + btnH, btnColor);
-                String btnText = atMax ? "MAX" : "Upgrade";
-                int btnTextColor = (atMax || !canAfford) ? 0xFF888888 : 0xFFFFFFFF;
+                String btnText = atMax ? "MAX" : (pending ? "Queued" : "Upgrade");
+                int btnTextColor = (atMax || pending || !canAfford) ? 0xFF888888 : 0xFFFFFFFF;
                 g.drawString(font, btnText, btnX + (btnW - font.width(btnText)) / 2, btnY + 2, btnTextColor, false);
             }
         }
@@ -1377,7 +1365,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                 int btnX = leftPos + QUEUE_GRID_X + (AVAIL_COLS * CELL) - 2 - 46;
                 int btnY = topPos + 126;
                 if (mX >= btnX && mX < btnX + 46 && mY >= btnY && mY < btnY + 11) {
-                    if (canAffordUpgrade(sel, defEntry)) {
+                    if (!isUpgradePending(sel) && canAffordUpgrade(sel, defEntry)) {
                         NetworkHelper.sendUpgradeBuildingPacket.accept(anchorPos, sel.worldPosLong());
                     }
                     return;
@@ -1409,6 +1397,13 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
             if (e.worldPosLong() == selectedUpgradeBuildingPos) return e;
         }
         return null;
+    }
+
+    private boolean isUpgradePending(UpgradeBuildingEntry entry) {
+        for (ClientQueueEntry qe : constructionQueueClient) {
+            if (qe.isUpgrade() && qe.buildingWorldPos() == entry.worldPosLong()) return true;
+        }
+        return false;
     }
 
     private boolean canAffordUpgrade(UpgradeBuildingEntry entry, ClientBuildingDefsRegistry.DefEntry defEntry) {
@@ -1450,12 +1445,10 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                 savedEraX = w.getX();
                 savedEraY = w.getY();
                 savedWidgetOrder.add(w.getClass().getSimpleName());
-            }
-        }
-        savedQuestOrder.clear();
-        for (DraggableWidget w : layer3Widgets) {
-            if (w instanceof QuestDraggableWidget qw) {
-                savedQuestOrder.add(qw.getQuestId());
+            } else if (w instanceof QuestHubWidget) {
+                savedQuestHubX = w.getX();
+                savedQuestHubY = w.getY();
+                savedWidgetOrder.add(w.getClass().getSimpleName());
             }
         }
         super.onClose();
@@ -1515,6 +1508,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                     if (cachedHubData.contains("ActivityLog")) {
                         sw.loadInitialLog(parseActivityLog(cachedHubData));
                     }
+                    sw.setOnBroadcastToggled(() -> NetworkHelper.sendToggleChatBroadcastPacket.accept(anchorPos));
                     layer1Widgets.add(0, sw);
                     savedSummaryOpen = true;
                     summaryClosed = false;
@@ -1533,6 +1527,29 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                     layer1Widgets.add(0, eraWidget);
                     savedEraOpen = true;
                     eraClosed = false;
+                    return true;
+                }
+                btnY -= 18;
+            }
+            if (questHubClosed) {
+                if (mX >= btnX && mX < btnX + 14 && mY >= btnY && mY < btnY + 14) {
+                    int freeZoneW = this.leftPos;
+                    int questH = DraggableWidget.TITLE_BAR_H + QuestHubWidget.VISIBLE_H;
+                    int startX = (savedQuestHubX >= 0)
+                        ? Math.min(savedQuestHubX, Math.max(0, freeZoneW - QuestHubWidget.WIDGET_W))
+                        : centerX(freeZoneW, QuestHubWidget.WIDGET_W);
+                    int startY = (savedQuestHubY >= 0)
+                        ? Math.min(savedQuestHubY, Math.max(0, this.height - questH))
+                        : centerY(this.height, questH);
+                    questHubWidget = new QuestHubWidget(startX, startY, freeZoneW, this.height);
+                    if (cachedHubData != null && cachedHubData.contains("Quests")) {
+                        List<CompoundTag> tags = new ArrayList<>();
+                        cachedHubData.getList("Quests", Tag.TAG_COMPOUND).forEach(t -> tags.add((CompoundTag) t));
+                        questHubWidget.setQuests(tags, anchorPos);
+                    }
+                    layer1Widgets.add(0, questHubWidget);
+                    savedQuestHubOpen = true;
+                    questHubClosed = false;
                     return true;
                 }
             }
@@ -1556,15 +1573,6 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
                     activeTab = i;
                     return true;
                 }
-            }
-        }
-
-        // Layer 3: quest cards cover the full screen
-        for (int i = layer3Widgets.size() - 1; i >= 0; i--) {
-            DraggableWidget w = layer3Widgets.get(i);
-            if (w.mouseClicked(mX, mY, button)) {
-                if (i != layer3Widgets.size() - 1) { layer3Widgets.remove(i); layer3Widgets.add(w); }
-                return true;
             }
         }
 
@@ -1733,16 +1741,8 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
             expandedWidget.mouseDragged(mX, mY, button, dX, dY);
             return true;
         }
-        // Route exclusively to the widget that owns the current drag (layer 3 has priority)
-        for (DraggableWidget w : layer3Widgets) {
-            if (w.isDragging()) return w.mouseDragged(mX, mY, button, dX, dY);
-        }
         for (DraggableWidget w : layer1Widgets) {
             if (w.isDragging()) return w.mouseDragged(mX, mY, button, dX, dY);
-        }
-        // No drag active: route in z-order (top first)
-        for (int i = layer3Widgets.size() - 1; i >= 0; i--) {
-            if (layer3Widgets.get(i).mouseDragged(mX, mY, button, dX, dY)) return true;
         }
         for (int i = layer1Widgets.size() - 1; i >= 0; i--) {
             if (layer1Widgets.get(i).mouseDragged(mX, mY, button, dX, dY)) return true;
@@ -1758,15 +1758,8 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
             expandedWidget.mouseReleased(mX, mY, button);
             return true;
         }
-        // Route release to the dragging widget first (layer 3 has priority)
-        for (DraggableWidget w : layer3Widgets) {
-            if (w.isDragging()) return w.mouseReleased(mX, mY, button);
-        }
         for (DraggableWidget w : layer1Widgets) {
             if (w.isDragging()) return w.mouseReleased(mX, mY, button);
-        }
-        for (DraggableWidget w : layer3Widgets) {
-            if (w.mouseReleased(mX, mY, button)) return true;
         }
         for (DraggableWidget w : layer1Widgets) {
             if (w.mouseReleased(mX, mY, button)) return true;
@@ -1781,10 +1774,6 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         if (expandedViewOpen && expandedWidget != null) {
             expandedWidget.mouseScrolled(mX, mY, delta);
             return true;
-        }
-        // Layer 3 (quests) has scroll priority, then layer 1
-        for (int i = layer3Widgets.size() - 1; i >= 0; i--) {
-            if (layer3Widgets.get(i).mouseScrolled(mX, mY, delta)) return true;
         }
         for (int i = layer1Widgets.size() - 1; i >= 0; i--) {
             if (layer1Widgets.get(i).mouseScrolled(mX, mY, delta)) return true;
@@ -1810,6 +1799,80 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    // Rebuilds the have-values of each resource cost row from the local stock snapshot,
+    // then pushes updated transitions to the era widget. Called on every stock packet.
+    private void refreshEraWidgetFromStock() {
+        if (eraWidget == null || eraTransitions.isEmpty()) return;
+        List<EraProgressDraggableWidget.EraPathOption> updated = new ArrayList<>();
+        for (EraProgressDraggableWidget.EraPathOption opt : eraTransitions) {
+            List<EraProgressDraggableWidget.CostRow> updatedCost = new ArrayList<>();
+            boolean resourcesMet = true;
+            for (EraProgressDraggableWidget.CostRow cr : opt.resourceCost()) {
+                int have = stockSnapshot.getOrDefault(cr.itemId(), 0);
+                updatedCost.add(new EraProgressDraggableWidget.CostRow(cr.itemId(), cr.amount(), have));
+                if (have < cr.amount()) resourcesMet = false;
+            }
+            boolean buildingsMet = opt.requiredBuildings().stream().allMatch(rb -> rb.have() >= rb.count());
+            boolean newPrereqsMet = opt.weightMet() && resourcesMet && opt.residentsMet() && buildingsMet;
+            updated.add(new EraProgressDraggableWidget.EraPathOption(
+                opt.id(), opt.orientationLabel(), opt.iconItem(),
+                newPrereqsMet, opt.requiredWeight(), opt.currentWeight(), opt.maxWeight(), opt.weightMet(),
+                updatedCost, opt.requiredResidents(), opt.activeResidents(),
+                opt.residentsMet(), opt.requiredBuildings(), opt.unlocked()
+            ));
+        }
+        eraTransitions = updated;
+        eraWidget.updateData(currentEra, eraTransitions);
+    }
+
+    // Rebuilds the requiredBuildings.have counts from the server-provided building counts map,
+    // then pushes updated transitions to the era widget. Called on every building list packet.
+    private void refreshEraWidgetFromBuildingCounts(net.minecraft.nbt.CompoundTag counts) {
+        if (eraWidget == null || eraTransitions.isEmpty()) return;
+        List<EraProgressDraggableWidget.EraPathOption> updated = new ArrayList<>();
+        for (EraProgressDraggableWidget.EraPathOption opt : eraTransitions) {
+            List<EraProgressDraggableWidget.ReqBuildRow> updatedBuildings = new ArrayList<>();
+            boolean buildingsMet = true;
+            for (EraProgressDraggableWidget.ReqBuildRow rb : opt.requiredBuildings()) {
+                int have = counts.getInt(rb.defId());
+                updatedBuildings.add(new EraProgressDraggableWidget.ReqBuildRow(rb.defId(), rb.count(), have));
+                if (have < rb.count()) buildingsMet = false;
+            }
+            boolean resourcesMet = opt.resourceCost().stream().allMatch(cr -> cr.have() >= cr.amount());
+            boolean newPrereqsMet = opt.weightMet() && resourcesMet && opt.residentsMet() && buildingsMet;
+            updated.add(new EraProgressDraggableWidget.EraPathOption(
+                opt.id(), opt.orientationLabel(), opt.iconItem(),
+                newPrereqsMet, opt.requiredWeight(), opt.currentWeight(), opt.maxWeight(), opt.weightMet(),
+                opt.resourceCost(), opt.requiredResidents(), opt.activeResidents(),
+                opt.residentsMet(), updatedBuildings, opt.unlocked()
+            ));
+        }
+        eraTransitions = updated;
+        eraWidget.updateData(currentEra, eraTransitions);
+    }
+
+    // Rebuilds the currentWeight/maxWeight fields of each path option from the locally
+    // tracked weight values, then pushes updated transitions to the era widget.
+    // Called when a building list packet arrives (building placed or queued).
+    private void refreshEraWidgetFromWeight() {
+        if (eraWidget == null || eraTransitions.isEmpty()) return;
+        List<EraProgressDraggableWidget.EraPathOption> updated = new ArrayList<>();
+        for (EraProgressDraggableWidget.EraPathOption opt : eraTransitions) {
+            boolean newWeightMet = currentWeight >= opt.requiredWeight() && currentWeight <= maxWeight;
+            boolean resourcesMet = opt.resourceCost().stream().allMatch(cr -> cr.have() >= cr.amount());
+            boolean buildingsMet = opt.requiredBuildings().stream().allMatch(rb -> rb.have() >= rb.count());
+            boolean newPrereqsMet = newWeightMet && resourcesMet && opt.residentsMet() && buildingsMet;
+            updated.add(new EraProgressDraggableWidget.EraPathOption(
+                opt.id(), opt.orientationLabel(), opt.iconItem(),
+                newPrereqsMet, opt.requiredWeight(), currentWeight, maxWeight, newWeightMet,
+                opt.resourceCost(), opt.requiredResidents(), opt.activeResidents(),
+                opt.residentsMet(), opt.requiredBuildings(), opt.unlocked()
+            ));
+        }
+        eraTransitions = updated;
+        eraWidget.updateData(currentEra, eraTransitions);
+    }
 
     private static List<EraProgressDraggableWidget.EraPathOption> parseEraTransitions(CompoundTag hub) {
         List<EraProgressDraggableWidget.EraPathOption> result = new ArrayList<>();
@@ -1893,7 +1956,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         for (CostEntry ce : entry.cost()) {
             if (stockSnapshot.getOrDefault(ce.itemId(), 0) < ce.amount()) return false;
         }
-        return currentWeight + categoryWeights.getOrDefault(entry.category(), 0) <= maxWeight;
+        return currentWeight + entry.weight() <= maxWeight;
     }
 
     private static int categoryColor(String category) {
@@ -1954,7 +2017,7 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         // Ghost preview when hovering a catalog slot (Build tab only)
         if (activeTab == 1 && hoveredCatalogSlot >= 0 && hoveredCatalogSlot < buildingCatalog.size()) {
             BuildingEntry hov = buildingCatalog.get(hoveredCatalogSlot);
-            int weightDelta = categoryWeights.getOrDefault(hov.category(), 0);
+            int weightDelta = hov.weight();
             if (weightDelta > 0 && maxWeight > 0) {
                 float ghostFrac = (float) weightDelta / maxWeight;
                 int ghostPx = (int)(barW * Math.min(1f - fill, ghostFrac));
@@ -1991,7 +2054,6 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
         }
     }
 
-    // Renders the trade zone overlay on the stock tab:
     // Overrides vanilla tooltip to inject trade price icons when hovering a tradeable chest slot.
     // Uses this.hoveredSlot (same detection as vanilla) to avoid any zone mismatch.
     @Override
@@ -2195,6 +2257,12 @@ public class TownHubScreen extends AbstractContainerScreen<TownHubMenu> {
             boolean hover = mx >= btnX && mx < btnX + 14 && my >= btnY && my < btnY + 14;
             g.fill(btnX, btnY, btnX + 14, btnY + 14, hover ? 0xFF555555 : 0xFF333333);
             drawEraIcon(g, btnX + 2, btnY + 2);
+            btnY -= 18;
+        }
+        if (questHubClosed) {
+            boolean hover = mx >= btnX && mx < btnX + 14 && my >= btnY && my < btnY + 14;
+            g.fill(btnX, btnY, btnX + 14, btnY + 14, hover ? 0xFF555555 : 0xFF333333);
+            g.drawString(Minecraft.getInstance().font, "Q", btnX + 4, btnY + 3, 0xFFFFFFFF, false);
         }
     }
 

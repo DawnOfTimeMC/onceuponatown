@@ -41,9 +41,6 @@ public class FoodListDataHandler {
             if (!entry.getKey().getNamespace().equals(Ouat.MOD_ID)) continue;
             try (InputStreamReader reader = new InputStreamReader(entry.getValue().open())) {
                 JsonObject json = GSON.fromJson(reader, JsonObject.class);
-                if (json.has("food_list")) {
-                    LOGGER.warn("[OUAT] food_list.json uses deprecated 'food_list' key - use 'resident_food' and 'herd_food' instead");
-                }
                 if (json.has("feeding_schedule")) {
                     JsonArray scheduleArray = json.getAsJsonArray("feeding_schedule");
                     for (var el : scheduleArray) {
@@ -64,8 +61,6 @@ public class FoodListDataHandler {
         RESIDENT_FOOD_MAP = Collections.unmodifiableMap(newResidentMap);
         HERD_FOOD_MAP = Collections.unmodifiableMap(newHerdMap);
         FEEDING_SCHEDULE = Collections.unmodifiableList(newSchedule);
-        LOGGER.info("[OUAT] Loaded food list: {} resident entries, {} herd entries, {} meal(s)/day",
-            RESIDENT_FOOD_MAP.size(), HERD_FOOD_MAP.size(), FEEDING_SCHEDULE.size());
     }
 
     private static void parseItemList(JsonArray array, LinkedHashMap<Item, Integer> map) {
@@ -75,10 +70,7 @@ public class FoodListDataHandler {
             int fuv = obj.get("fuv").getAsInt();
             ResourceLocation rl = new ResourceLocation(itemId);
             Item item = BuiltInRegistries.ITEM.getOptional(rl).orElse(null);
-            if (item == null) {
-                LOGGER.warn("[OUAT] food_list.json: unknown item '{}', skipping", itemId);
-                continue;
-            }
+            if (item == null) continue;
             map.put(item, fuv);
         }
     }

@@ -136,10 +136,7 @@ public class BuildSchematic {
                 }
             }
 
-            if (terrainY == Integer.MIN_VALUE) {
-                LOGGER.warn("[OUAT] Road column ({}, {}): no terrain found, skipping", wx, wz);
-                continue;
-            }
+            if (terrainY == Integer.MIN_VALUE) continue;
 
             int deltaY = terrainY - templateFloorY;
 
@@ -452,7 +449,7 @@ public class BuildSchematic {
             Direction rawDir = info.state().getValue(JigsawBlock.ORIENTATION).front();
             Direction rotatedDir = pieceRotation.rotate(rawDir);
             String target = info.nbt().getString("target");
-            points.add(new ConnectionPoint(worldPos, rotatedDir, target));
+            points.add(new ConnectionPoint(worldPos, rotatedDir, target, 0L));
         }
         return points;
     }
@@ -486,7 +483,7 @@ public class BuildSchematic {
             Direction rawDir = info.state().getValue(JigsawBlock.ORIENTATION).front();
             Direction rotatedDir = rotation.rotate(rawDir);
             String target = info.nbt().getString("target");
-            points.add(new ConnectionPoint(worldPos, rotatedDir, target));
+            points.add(new ConnectionPoint(worldPos, rotatedDir, target, 0L));
         }
         return points;
     }
@@ -510,7 +507,7 @@ public class BuildSchematic {
             Direction rawDir = info.state().getValue(JigsawBlock.ORIENTATION).front();
             Direction rotatedDir = rotation.rotate(rawDir);
             String target = info.nbt().getString("target");
-            points.add(new ConnectionPoint(worldPos, rotatedDir, target));
+            points.add(new ConnectionPoint(worldPos, rotatedDir, target, 0L));
         }
         return points;
     }
@@ -537,6 +534,49 @@ public class BuildSchematic {
 
     // Result of a diff between two upgrade-level NBTs at the same origin and rotation.
     public record DiffResult(List<SchematicBlock> toAdd, List<BlockPos> toRemove) {}
+
+    // Returns entities present in toNbt but not accounted for in fromNbt, compared by type count.
+    // For each entity type: if toNbt has more than fromNbt, spawn the delta at toNbt positions.
+    // This is intentionally world-agnostic: entities may have wandered, so we never read the world.
+    public static List<SchematicEntity> computeEntityDiff(ServerLevel level,
+                                                           ResourceLocation fromNbt,
+                                                           ResourceLocation toNbt,
+                                                           Rotation rotation,
+                                                           BlockPos origin,
+                                                           int fromYOffset) {
+        Optional<StructureTemplate> fromTpl = level.getStructureManager().get(fromNbt);
+        Optional<StructureTemplate> toTpl   = level.getStructureManager().get(toNbt);
+        if (fromTpl.isEmpty() || toTpl.isEmpty()) return List.of();
+
+        BlockPos toOrigin = fromYOffset == 0 ? origin : origin.offset(0, -fromYOffset, 0);
+
+        List<SchematicEntity> fromEntities = SchematicReader.readEntities(fromTpl.get(), rotation, BlockPos.ZERO);
+        List<SchematicEntity> toEntities   = SchematicReader.readEntities(toTpl.get(),   rotation, toOrigin);
+
+        // Count entities per type in fromNbt.
+        Map<String, Integer> fromCounts = new HashMap<>();
+        for (SchematicEntity e : fromEntities) {
+            String id = e.nbt().getString("id");
+            if (!id.isEmpty()) fromCounts.merge(id, 1, Integer::sum);
+        }
+
+        // For each type in toNbt, collect entities beyond the fromNbt count.
+        Map<String, Integer> toConsumed = new HashMap<>();
+        List<SchematicEntity> toSpawn = new ArrayList<>();
+        for (SchematicEntity e : toEntities) {
+            String id = e.nbt().getString("id");
+            if (id.isEmpty()) continue;
+            int already = fromCounts.getOrDefault(id, 0);
+            int consumed = toConsumed.getOrDefault(id, 0);
+            if (consumed < already) {
+                toConsumed.merge(id, 1, Integer::sum);
+            } else {
+                toSpawn.add(e);
+            }
+        }
+
+        return toSpawn;
+    }
 
     // Computes the visual diff between two structure NBTs (fromNbt = current level, toNbt = next level).
     // toAdd: blocks present in toNbt but absent or different in fromNbt.

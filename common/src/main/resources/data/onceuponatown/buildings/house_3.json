@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:houses",
   "icon_item": "minecraft:yellow_bed",
   "category": "buildings",
+  "weight": 2,
+
   "residents": 2,
   "consumption_per_resident": 1.0,
   "construction_cost": [

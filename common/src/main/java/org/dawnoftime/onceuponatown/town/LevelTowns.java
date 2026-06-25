@@ -6,6 +6,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
+import org.dawnoftime.onceuponatown.datapack.QuestDataHandler;
 
 import java.util.Collection;
 import java.util.Comparator;
@@ -69,6 +70,12 @@ public class LevelTowns extends SavedData {
             long posLong = entry.getLong("AnchorPos");
             lt.towns.put(posLong, Town.fromNbt(entry));
         });
+        Set<String> validQuestIds = QuestDataHandler.getRegistryKeySet();
+        boolean anyChanged = false;
+        for (Town town : lt.towns.values()) {
+            if (town.cleanupOrphanedQuestData(validQuestIds)) anyChanged = true;
+        }
+        if (anyChanged) lt.setDirty();
         return lt;
     }
 }

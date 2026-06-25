@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:carrot",
   "category": "jobs",
+  "weight": 2,
+
   "required_buildings": [
     { "defId": "wild_crops", "count": 1 }
   ],

@@ -46,10 +46,7 @@ public class TradePriceDataHandler {
                         int sell     = obj.get("sell").getAsInt();
                         int quantity = obj.has("quantity") ? Math.max(1, obj.get("quantity").getAsInt()) : 1;
                         Item item = BuiltInRegistries.ITEM.getOptional(new ResourceLocation(itemId)).orElse(null);
-                        if (item == null) {
-                            LOGGER.warn("[OUAT] trade_prices.json: unknown item '{}', skipping", itemId);
-                            continue;
-                        }
+                        if (item == null) continue;
                         newMap.put(item, new int[]{ buy, sell, quantity });
                     }
                 }
@@ -59,7 +56,6 @@ public class TradePriceDataHandler {
             break;
         }
         PRICE_MAP = Collections.unmodifiableMap(newMap);
-        LOGGER.info("[OUAT] Loaded trade prices: {} entries", PRICE_MAP.size());
     }
 
     public static int getBuyPrice(Item item) {

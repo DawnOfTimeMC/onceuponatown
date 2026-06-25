@@ -5,10 +5,12 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import org.dawnoftime.onceuponatown.town.ActiveBuildState;
 import org.dawnoftime.onceuponatown.town.ConnectionPoint;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.phys.Vec3;
 import org.dawnoftime.onceuponatown.building.schematic.SchematicBlock;
 import org.dawnoftime.onceuponatown.datapack.BuilderConfigDataHandler;
@@ -171,6 +173,10 @@ public class BuildGoal implements BuildTask {
         npc.getLookControl().setLookAt(worldPos.getX() + 0.5, worldPos.getY() + 0.5, worldPos.getZ() + 0.5);
         sl.setBlock(worldPos, b.state(), Block.UPDATE_ALL);
 
+        SoundType sound = b.state().getSoundType();
+        sl.playSound(null, worldPos, sound.getPlaceSound(), SoundSource.BLOCKS,
+            sound.getVolume(), sound.getPitch());
+
         if (b.nbt() != null) {
             BlockEntity be = sl.getBlockEntity(worldPos);
             if (be != null) be.load(b.nbt().copy());
@@ -213,7 +219,7 @@ public class BuildGoal implements BuildTask {
         if (def == null) return null;
 
         ConnectionPoint conn = new ConnectionPoint(
-            state.connectionPos(), state.connectionDir(), state.connectionTarget());
+            state.connectionPos(), state.connectionDir(), state.connectionTarget(), 0L);
 
         NewBuildAction action = new NewBuildAction(
             def, conn, state.placementPos(), state.rotation(),

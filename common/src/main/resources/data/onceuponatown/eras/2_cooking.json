@@ -4,7 +4,6 @@
   "orientation_label": "Cooking",
   "structure_label": "Village",
   "icon_item": "minecraft:smoker",
-  "max_active_quests": 2,
 
   "min_weight_percent": 90,
   "weight_cap_increase": 10,

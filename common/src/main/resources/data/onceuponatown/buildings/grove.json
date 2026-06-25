@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:oak_log",
   "category": "naturals",
+  "weight": 1,
+
   "construction_cost": [
     {
       "item": "minecraft:oak_log",

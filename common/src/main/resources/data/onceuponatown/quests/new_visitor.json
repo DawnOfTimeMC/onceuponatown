@@ -1,0 +1,13 @@
+{
+  "id": "onceuponatown:new_visitor",
+  "type": "NOTE",
+  "title": "quest.onceuponatown.new_visitor.title",
+  "description": "quest.onceuponatown.new_visitor.desc",
+
+  "prerequisites": {
+    "min_era": 0,
+    "stock_conditions": [
+      { "item": "minecraft:oak_log", "min": 35 }
+    ]
+  }
+}

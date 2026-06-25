@@ -19,8 +19,10 @@ import org.dawnoftime.onceuponatown.datapack.TradePriceDataHandler;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -43,9 +45,6 @@ public class TownHubDataBuilder {
         hub.putString("CurrentOrientation", town.getOrDeriveOrientation());
         hub.putInt("CurrentWeight", town.getCurrentWeight());
         hub.putInt("MaxWeight", town.getCurrentMaxWeight());
-        CompoundTag cwTag = new CompoundTag();
-        town.getCategoryWeights().forEach(cwTag::putInt);
-        hub.put("CategoryWeights", cwTag);
 
         ListTag eraTransitionsTag = new ListTag();
         TownInventory invForEra = town.getTownInventory();
@@ -152,10 +151,17 @@ public class TownHubDataBuilder {
         CompoundTag tag = new CompoundTag();
         tag.put("AnchorPos", NbtUtils.writeBlockPos(anchorPos));
         tag.put("MapData", buildMapData());
+        tag.putInt("CurrentWeight", town.getCurrentWeight());
+        tag.putInt("MaxWeight", town.getCurrentMaxWeight());
         ListTag cqTag = new ListTag();
         town.getConstructionQueue().forEach(e -> cqTag.add(QueueEntry.serialize(e)));
         tag.put("ConstructionQueue", cqTag);
         tag.put("UpgradeBuildings", buildUpgradeBuildingsTag());
+        CompoundTag buildingCountsTag = new CompoundTag();
+        for (PlacedBuilding b : town.getBuildings()) {
+            buildingCountsTag.putInt(b.defId, buildingCountsTag.getInt(b.defId) + 1);
+        }
+        tag.put("BuildingCounts", buildingCountsTag);
         return tag;
     }
 
@@ -167,7 +173,7 @@ public class TownHubDataBuilder {
         return tag;
     }
 
-    // Era progress + available transitions (sent after era changes or queue updates).
+    // Era progress + available transitions + updated building catalog (sent after era changes or queue updates).
     public CompoundTag buildEraUpdateData(BlockPos anchorPos) {
         CompoundTag tag = new CompoundTag();
         tag.put("AnchorPos", NbtUtils.writeBlockPos(anchorPos));
@@ -184,6 +190,34 @@ public class TownHubDataBuilder {
         ListTag boostedTag = new ListTag();
         for (String id : town.getBoostedBuildingIds()) boostedTag.add(StringTag.valueOf(id));
         tag.put("BoostedBuildings", boostedTag);
+
+        String orientation = town.getOrDeriveOrientation();
+        Set<String> gatedIds = EraTransitionDataHandler.getAllGatedBuildingIds();
+        Set<String> nextEraIds = new HashSet<>();
+        for (EraTransitionDef t : EraTransitionDataHandler.getAvailableTransitions(town.getCurrentEra(), orientation)) {
+            nextEraIds.addAll(t.unlockedBuildingIds);
+        }
+        nextEraIds.removeAll(town.getUnlockedBuildingIds());
+        List<BuildingDef> sortedDefs = BuildingDataHandler.getAll().stream()
+            .filter(def -> {
+                if (def.terrainMatching) return false;
+                if ("town_center".equals(def.category)) {
+                    return town.getBuildings().stream().anyMatch(b -> b.defId.equals(def.id));
+                }
+                return !gatedIds.contains(def.id)
+                    || town.getUnlockedBuildingIds().contains(def.id)
+                    || nextEraIds.contains(def.id);
+            })
+            .sorted(Comparator.<BuildingDef, Boolean>comparing(def -> "town_center".equals(def.category))
+                .reversed()
+                .thenComparing(def -> nextEraIds.contains(def.id))
+                .thenComparingInt(def -> BuildingListDataHandler.getIndex(def.id)))
+            .toList();
+        ListTag catalogTag = new ListTag();
+        for (BuildingDef def : sortedDefs) {
+            catalogTag.add(buildCatalogEntry(def, nextEraIds));
+        }
+        tag.put("BuildingCatalog", catalogTag);
         return tag;
     }
 
@@ -318,12 +352,19 @@ public class TownHubDataBuilder {
             costTag.add(ct);
         }
         dt.put("ConstructionCost", costTag);
+        int catalogLevel = town.getBuildings().stream()
+            .filter(b -> b.defId.equals(def.id))
+            .mapToInt(PlacedBuilding::getUpgradeLevel)
+            .max()
+            .orElse(0);
+        dt.putInt("CurrentLevel", catalogLevel);
         ListTag prodTag = new ListTag();
         for (ProductionEntry pe : def.production) {
             CompoundTag pt = new CompoundTag();
             pt.putString("Item", BuiltInRegistries.ITEM.getKey(pe.item()).toString());
             pt.putInt("Amount", pe.amount());
             pt.putInt("EveryTicks", pe.everyTicks());
+            pt.putInt("UnlockAtLevel", pe.unlockAtLevel());
             prodTag.add(pt);
         }
         dt.put("Production", prodTag);
@@ -341,6 +382,7 @@ public class TownHubDataBuilder {
             tt.putString("OutputItem", BuiltInRegistries.ITEM.getKey(tr.outputItem()).toString());
             tt.putInt("OutputAmount", tr.outputAmount());
             tt.putInt("EveryTicks", def.transformEveryTicks);
+            tt.putInt("UnlockAtLevel", tr.unlockAtLevel());
             transTag.add(tt);
         }
         dt.put("Transformations", transTag);
@@ -374,6 +416,7 @@ public class TownHubDataBuilder {
             }
             dt.put("RequiredBuildings", reqBuildingsTag);
         }
+        dt.putInt("Weight", def.weight);
         return dt;
     }
 
@@ -432,11 +475,9 @@ public class TownHubDataBuilder {
             qt.putString("QuestId", q.questId);
             qt.putString("DefId", q.defId);
             qt.putString("QuestType", q.questType != null ? q.questType : "TASK");
-            qt.putLong("ExpiryTime", q.expiryTime);
             QuestDataHandler.get(q.defId).ifPresent(def -> {
                 qt.putString("TitleKey", def.titleKey());
                 qt.putString("DescKey", def.descKey());
-                qt.putString("Icon", def.icon());
             });
             ListTag condsTag = new ListTag();
             for (Quest.Condition c : q.conditions) {
@@ -444,7 +485,6 @@ public class TownHubDataBuilder {
                 ct.putString("Type", c.type);
                 if (c.item != null) ct.putString("Item", BuiltInRegistries.ITEM.getKey(c.item).toString());
                 ct.putInt("Required", c.required);
-                ct.putInt("Received", c.received);
                 condsTag.add(ct);
             }
             qt.put("Conditions", condsTag);
@@ -485,16 +525,29 @@ public class TownHubDataBuilder {
         if (!isStreet && def != null) {
             el.putString("BuildingCategory", def.category);
 
-            BuildingDef.ResolvedBuildingStats stats = def.resolveAtLevel(b.getUpgradeLevel());
+            int currentLevel = b.getUpgradeLevel();
+            BuildingDef.ResolvedBuildingStats stats = def.resolveAtLevel(currentLevel);
+            // Build a lookup of unlocked entries (with upgrade-adjusted amounts) by item.
+            Map<Item, ProductionEntry> unlockedAdj = new LinkedHashMap<>();
+            for (ProductionEntry pe : stats.production()) unlockedAdj.put(pe.item(), pe);
+
             ListTag prodTag = new ListTag();
-            for (ProductionEntry pe : stats.production()) {
-                int effectiveTicks = stats.totalCadenceMultiplier() > 0
-                    ? (int) Math.max(1, Math.round(pe.everyTicks() / (1.0 + stats.totalCadenceMultiplier())))
-                    : pe.everyTicks();
+            for (ProductionEntry pe : def.production) {
+                boolean locked = pe.unlockAtLevel() >= 0 && currentLevel < pe.unlockAtLevel();
                 CompoundTag pt = new CompoundTag();
                 pt.putString("Item", BuiltInRegistries.ITEM.getKey(pe.item()).toString());
-                pt.putInt("Amount", pe.amount());
-                pt.putInt("EveryTicks", effectiveTicks);
+                if (locked) {
+                    pt.putInt("Amount", pe.amount());
+                    pt.putInt("EveryTicks", pe.everyTicks());
+                    pt.putBoolean("Locked", true);
+                } else {
+                    ProductionEntry adj = unlockedAdj.getOrDefault(pe.item(), pe);
+                    int effectiveTicks = stats.totalCadenceMultiplier() > 0
+                        ? (int) Math.max(1, Math.round(adj.everyTicks() / (1.0 + stats.totalCadenceMultiplier())))
+                        : adj.everyTicks();
+                    pt.putInt("Amount", adj.amount());
+                    pt.putInt("EveryTicks", effectiveTicks);
+                }
                 prodTag.add(pt);
             }
             el.put("Production", prodTag);
@@ -514,6 +567,7 @@ public class TownHubDataBuilder {
                     tt.putString("OutputItem", BuiltInRegistries.ITEM.getKey(tr.outputItem()).toString());
                     tt.putInt("OutputAmount", tr.outputAmount());
                     tt.putInt("EveryTicks", def.transformEveryTicks);
+                    if (!tr.isActive(currentLevel)) tt.putBoolean("Locked", true);
                     transformsTag.add(tt);
                 }
                 el.put("Transforms", transformsTag);

@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:emerald",
   "category": "jobs",
+  "weight": 3,
+
   "required_residents": 5,
   "construction_cost": [
     {

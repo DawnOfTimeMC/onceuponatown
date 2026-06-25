@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:wheat",
   "category": "jobs",
+  "weight": 2,
+
   "required_buildings": [
     { "defId": "wild_crops", "count": 1 }
   ],
@@ -21,7 +23,7 @@
     {
       "item": "minecraft:wheat_seeds",
       "amount": 1,
-      "every_ticks": 1600,
+      "every_ticks": 1800,
       "capacity_stacks": 1
     },
     {

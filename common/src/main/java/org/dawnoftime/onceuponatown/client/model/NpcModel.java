@@ -74,10 +74,8 @@ public class NpcModel<T extends Npc> extends HumanoidModel<T> {
     @Override
     public void setupAnim(T npc, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch) {
         super.setupAnim(npc, limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch);
-        // Suppress vanilla head pitch (vertical nodding) -- NPC head stays level always.
-        this.head.xRot = 0.0F;
         this.head.zRot = 0.0F;
-        this.hat.xRot = 0.0F;
+        this.hat.xRot = this.head.xRot;
 
         // Detect a new block placement: generation counter changed since last frame.
         int gen = npc.getBuildGeneration();

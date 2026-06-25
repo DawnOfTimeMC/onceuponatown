@@ -57,8 +57,6 @@ public class EraTransitionDataHandler {
                     LOGGER.error("[OUAT] Failed to load era def {}: {}", location, e.getMessage());
                 }
             });
-        LOGGER.info("[OUAT] Loaded {} era definitions, {} era transition definitions: {}",
-            ERA_DEF_BY_STARTER.size(), REGISTRY.size(), REGISTRY.keySet());
     }
 
     private static EraDef parseEraDef(JsonObject json) {
@@ -74,19 +72,10 @@ public class EraTransitionDataHandler {
                 boostedBuildings.add(el.getAsString());
             }
         }
-        Map<String, Integer> categoryWeights = new HashMap<>();
-        if (json.has("category_weights")) {
-            JsonObject cw = json.getAsJsonObject("category_weights");
-            for (String key : cw.keySet()) {
-                categoryWeights.put(key, cw.get(key).getAsInt());
-            }
-        }
         int initialMaxWeight = json.has("initial_max_weight") ? json.get("initial_max_weight").getAsInt() : 20;
         double boostMultiplier = json.has("boost_multiplier") ? json.get("boost_multiplier").getAsDouble() : 1.0;
-        int maxActiveQuests = json.has("max_active_quests") ? json.get("max_active_quests").getAsInt() : 1;
         return new EraDef(era, orientation, orientationLabel, structureLabel, iconItem, starterBuildingId,
-            boostedBuildings, Collections.unmodifiableMap(categoryWeights), initialMaxWeight, boostMultiplier,
-            maxActiveQuests);
+            boostedBuildings, initialMaxWeight, boostMultiplier);
     }
 
     // Derives the transition id from the file path (e.g. "eras/2_rural.json" -> "2_rural").

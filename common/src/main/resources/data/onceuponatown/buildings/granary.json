@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:cobweb",
   "category": "jobs",
+  "weight": 3,
+
   "required_buildings": [
     { "defId": "wheat_field", "count": 1 },
     { "defId": "potato_field", "count": 1 },

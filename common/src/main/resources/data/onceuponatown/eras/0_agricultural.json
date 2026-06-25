@@ -7,12 +7,5 @@
   "starter_building_id": "settlement_3",
   "boosted_buildings": ["wheat_field", "potato_field", "carrot_field"],
   "boost_multiplier": 1.15,
-  "initial_max_weight": 20,
-  "max_active_quests": 1,
-  "category_weights": {
-    "naturals":  1,
-    "buildings": 2,
-    "gardens":   3,
-    "jobs":      3
-  }
+  "initial_max_weight": 20
 }

@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:wheat_seeds",
   "category": "naturals",
+  "weight": 1,
+
   "construction_cost": [
     {
       "item": "minecraft:oak_log",
@@ -14,7 +16,7 @@
     {
       "item": "minecraft:wheat_seeds",
       "amount": 1,
-      "every_ticks": 1600,
+      "every_ticks": 1800,
       "capacity_stacks": 1
     },
     {

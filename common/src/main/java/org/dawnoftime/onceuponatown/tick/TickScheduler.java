@@ -10,32 +10,25 @@ import org.dawnoftime.onceuponatown.entity.Npc;
 import org.dawnoftime.onceuponatown.registry.EntityRegistry;
 import org.dawnoftime.onceuponatown.town.ActiveBuildState;
 import org.dawnoftime.onceuponatown.town.LevelTowns;
-import org.dawnoftime.onceuponatown.datapack.QuestConfigDataHandler;
+import org.dawnoftime.onceuponatown.datapack.QuestDataHandler;
 import org.dawnoftime.onceuponatown.town.Quest;
+import org.dawnoftime.onceuponatown.town.QuestDef;
 import org.dawnoftime.onceuponatown.town.QuestManager;
+import org.dawnoftime.onceuponatown.town.TownInventory;
 import org.dawnoftime.onceuponatown.town.Town;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public class TickScheduler {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(TickScheduler.class);
-
     // Called from OuatForge via TickEvent.ServerTickEvent (Phase.END)
     public static void tick(MinecraftServer server) {
         for (ServerLevel level : server.getAllLevels()) {
             LevelTowns levelTowns = LevelTowns.get(level);
             long gameTime = level.getGameTime();
-
-            if (gameTime % 1200 == 0) {
-                LOGGER.info("[OUAT-TICK] Scheduler alive. Towns in level {}: {}",
-                    level.dimension().location(), levelTowns.getAllTowns().size());
-            }
 
             for (Map.Entry<Long, Town> townEntry : levelTowns.getAllTownEntries()) {
                 Town town = townEntry.getValue();
@@ -72,6 +65,8 @@ public class TickScheduler {
 
                         // All 9 chunks around the expected position are loaded but NPC is still missing:
                         // coherence issue (e.g. entity deleted externally). Spawn a replacement.
+                        // Release any queue claims the dead builder held so the new one can resume.
+                        if (slotId != null) town.releaseAllClaimsForBuilder(slotId);
                         Npc builder = EntityRegistry.NPC.create(level);
                         if (builder == null) continue;
 
@@ -111,29 +106,49 @@ public class TickScheduler {
     private static void tickQuests(Town town, ServerLevel level, long gameTime, long anchorKey) {
         BlockPos anchorPos = BlockPos.of(anchorKey);
         boolean changed = false;
+        TownInventory inventory = town.getTownInventory();
+        Map<String, Long> lastCompleted = town.getQuestDefLastCompleted();
 
-        if (gameTime % QuestConfigDataHandler.get().generationIntervalTicks == 0) {
-            Quest generated = QuestManager.tryGenerate(town.getActiveQuests(), town.getDismissedNoteIds(), gameTime, town.getMaxActiveQuests());
-            if (generated != null) {
-                town.addQuest(generated);
-                changed = true;
-            }
-        }
+        for (QuestDef def : QuestDataHandler.getAll()) {
+            if (QuestManager.isAlreadyActive(def, town.getActiveQuests())) continue;
 
-        if (gameTime % QuestConfigDataHandler.get().expiryCheckIntervalTicks == 0) {
-            List<Quest> toExpire = new ArrayList<>();
-            for (Quest q : town.getActiveQuests()) {
-                if (gameTime > q.expiryTime) toExpire.add(q);
+            if ("TASK".equals(def.type())) {
+                long lastTime = lastCompleted.getOrDefault(def.id(), 0L);
+                if (gameTime - lastTime < def.refreshIntervalTicks()) continue;
             }
-            if (!toExpire.isEmpty()) {
-                for (Quest q : toExpire) town.removeQuest(q.questId);
-                changed = true;
-            }
+
+            if (!prerequisitesMet(def.prerequisites(), town, inventory)) continue;
+
+            Quest q = QuestManager.buildFromDef(def);
+            town.addQuest(q);
+            changed = true;
         }
 
         if (changed) {
             LevelTowns.get(level).markDirty();
             NetworkHelper.pushQuestUpdateToWatchers(level, town, anchorPos);
         }
+    }
+
+    private static boolean prerequisitesMet(QuestDef.Prerequisites prereqs, Town town, TownInventory inventory) {
+        if (prereqs == null) return true;
+        int era = town.getCurrentEra();
+        if (era < prereqs.minEra() || era > prereqs.maxEra()) return false;
+        int residents = town.getActiveResidents();
+        if (residents < prereqs.minResidents() || residents > prereqs.maxResidents()) return false;
+        if (!prereqs.requiredOrientations().isEmpty()) {
+            String orientation = town.getOrDeriveOrientation();
+            if (prereqs.requiredOrientations().stream().noneMatch(o -> o.equals(orientation))) return false;
+        }
+        for (String defId : prereqs.requiredBuildings()) {
+            boolean found = town.getBuildings().stream().anyMatch(b -> b.getDefId().equals(defId));
+            if (!found) return false;
+        }
+        for (QuestDef.StockCondition sc : prereqs.stockConditions()) {
+            var item = BuiltInRegistries.ITEM.get(new ResourceLocation(sc.item()));
+            int stock = inventory.getStock(item);
+            if (stock < sc.min() || stock > sc.max()) return false;
+        }
+        return true;
     }
 }

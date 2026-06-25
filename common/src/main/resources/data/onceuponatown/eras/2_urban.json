@@ -4,7 +4,6 @@
   "orientation_label": "Urban",
   "structure_label": "Village",
   "icon_item": "minecraft:emerald",
-  "max_active_quests": 2,
 
   "min_weight_percent": 90,
   "weight_cap_increase": 10,
@@ -18,7 +17,7 @@
   "required_buildings": [
     { "defId": "wild_spot", "count": 1 }
   ],
-  "unlocked_building_ids": ["merchant_shop", "lone_place", "lone_garden", "fountain_place"],
+  "unlocked_building_ids": ["merchant_shop", "lone_place", "carpenter", "lone_garden", "fountain_place"],
   "unlock_new_builder": true,
 
   "next_orientation": "urban"

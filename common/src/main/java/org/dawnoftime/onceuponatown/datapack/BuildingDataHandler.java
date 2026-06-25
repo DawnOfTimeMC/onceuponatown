@@ -47,7 +47,6 @@ public class BuildingDataHandler {
                     LOGGER.error("[OUAT] Failed to load building def {}: {}", location, e.getMessage());
                 }
             });
-        LOGGER.info("[OUAT] Loaded {} building definitions: {}", REGISTRY.size(), REGISTRY.keySet());
     }
 
     private static BuildingDef parseDef(JsonObject json) {
@@ -186,6 +185,7 @@ public class BuildingDataHandler {
         int herd = json.has("herd") ? json.get("herd").getAsInt() : 0;
         float consumptionPerHerd = json.has("consumption_per_herd")
             ? json.get("consumption_per_herd").getAsFloat() : 0f;
+        int weight = json.has("weight") ? json.get("weight").getAsInt() : 1;
 
         List<ItemCost> initialStock = new ArrayList<>();
         if (json.has("initial_stock")) {
@@ -200,7 +200,7 @@ public class BuildingDataHandler {
             transformations, transformInputRatio, transformEveryTicks,
             productionBonus, stockBonus, residents, upgrades, nbtLevels,
             requiredResidents, requiredBuildings, consumptionPerResident, initialStock,
-            herd, consumptionPerHerd);
+            herd, consumptionPerHerd, weight);
     }
 
     // Builds the NBT payload sent to the client on player join (upgrade info only).

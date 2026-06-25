@@ -4,6 +4,7 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:honeycomb",
   "category": "jobs",
+  "weight": 2,
   "required_buildings": [
     { "defId": "wild_bee", "count": 2 }
   ],

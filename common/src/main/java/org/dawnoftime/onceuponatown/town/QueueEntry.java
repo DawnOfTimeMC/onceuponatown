@@ -9,19 +9,21 @@ import net.minecraft.nbt.CompoundTag;
  */
 public sealed interface QueueEntry permits QueueEntry.NewBuild, QueueEntry.Upgrade {
 
+    long entryId();
     String defId();
 
     /** A new building to construct from a connection point. */
-    record NewBuild(String defId) implements QueueEntry {}
+    record NewBuild(long entryId, String defId) implements QueueEntry {}
 
     /**
      * An upgrade task for a building already placed in the world.
      * fromLevel is the building's upgrade level when this task was enqueued.
      */
-    record Upgrade(String defId, BlockPos buildingWorldPos, int fromLevel) implements QueueEntry {}
+    record Upgrade(long entryId, String defId, BlockPos buildingWorldPos, int fromLevel) implements QueueEntry {}
 
     static CompoundTag serialize(QueueEntry entry) {
         CompoundTag tag = new CompoundTag();
+        tag.putLong("EntryId", entry.entryId());
         if (entry instanceof Upgrade u) {
             tag.putString("Type", "upgrade");
             tag.putString("DefId", u.defId());
@@ -35,10 +37,11 @@ public sealed interface QueueEntry permits QueueEntry.NewBuild, QueueEntry.Upgra
     }
 
     static QueueEntry deserialize(CompoundTag tag) {
+        long entryId = tag.contains("EntryId") ? tag.getLong("EntryId") : 0L;
         String defId = tag.getString("DefId");
         if ("upgrade".equals(tag.getString("Type"))) {
-            return new Upgrade(defId, BlockPos.of(tag.getLong("BuildingWorldPos")), tag.getInt("FromLevel"));
+            return new Upgrade(entryId, defId, BlockPos.of(tag.getLong("BuildingWorldPos")), tag.getInt("FromLevel"));
         }
-        return new NewBuild(defId);
+        return new NewBuild(entryId, defId);
     }
 }

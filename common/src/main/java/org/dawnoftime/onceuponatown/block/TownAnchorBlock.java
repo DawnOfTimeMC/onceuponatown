@@ -50,7 +50,9 @@ public class TownAnchorBlock extends BaseEntityBlock {
             if (be != null) {
                 Town town = LevelTowns.get((net.minecraft.server.level.ServerLevel) level).getTownAt(pos).orElse(null);
                 if (town == null) return InteractionResult.FAIL;
-                NetworkHelper.sendTownHubPacket.accept((ServerPlayer) player, town.getHubData(pos));
+                net.minecraft.nbt.CompoundTag hubData = town.getHubData(pos);
+                hubData.putBoolean("ChatSubscribed", town.isChatSubscriber(player.getUUID()));
+                NetworkHelper.sendTownHubPacket.accept((ServerPlayer) player, hubData);
                 player.openMenu(be);
             }
         }

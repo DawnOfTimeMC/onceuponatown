@@ -254,7 +254,7 @@ public class NbtPreviewWidget {
         }
     }
 
-    private static void drawPadlockIcon(GuiGraphics g, int bx, int by) {
+    public static void drawPadlockIcon(GuiGraphics g, int bx, int by) {
         int c = 0xFFCCCCCC;
         int k = 0xFF111111;
         g.fill(bx + 2, by,     bx + 6, by + 1, c);

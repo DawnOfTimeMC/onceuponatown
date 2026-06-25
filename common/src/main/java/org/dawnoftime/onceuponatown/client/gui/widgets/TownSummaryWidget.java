@@ -28,30 +28,43 @@ public class TownSummaryWidget extends DraggableWidget {
 
     private static final int HEADER_H    = 12;
     private static final int ITEM_H      = 16;
+    private static final int CELL_SIZE   = 18;
+    private static final int MAX_COLS    = 7;
     private static final int PADDING     = 3;
-    private static final int SCROLLBAR_W = 6;
-    private static final int TOGGLE_BTN_W = 10;
-    private static final int TOGGLE_BTN_GAP = 2;
+    private static final int SCROLLBAR_W  = 6;
+    private static final int TAB_BTN_W   = 26;
+    private static final int TAB_BTN_GAP = 2;
+    private static final int BELL_BTN_W  = 10;
 
     private static final int COLOR_HEADER_BG   = 0xF52A2A2A;
     private static final int COLOR_SECTION_TEXT = 0xFFAAAAFF;
     private static final int COLOR_ORIENT_TEXT  = 0xFFEECC66;
     private static final int COLOR_CONTENT_BG   = 0xF51A1A1A;
 
-    private static final String[] TOGGLE_LABELS = {"I", "P", "T", "L"};
+    private static final String[] TAB_LABELS = {"Info", "Log"};
 
-    // Toggle block visibility (session-only, reset to true on load)
-    static boolean blockInfoVisible           = true;
-    static boolean blockProductionVisible     = true;
-    static boolean blockTransformationVisible = true;
-    static boolean blockLogVisible            = false;
+    // Active tab (session-only): false = Info, true = Log
+    static boolean showLogs = false;
+    // Chat broadcast toggle - set from server on hub open, toggled locally on click
+    public static boolean chatBroadcastEnabled = false;
+
+    private Runnable onBroadcastToggled = null;
 
     // Activity log entries: newest first (index 0 = most recent)
     private final ArrayDeque<TownLogEntry> logEntries = new ArrayDeque<>();
 
-    private record Row(ItemStack icon, Component text, boolean isSection) {}
+    private enum RowType { ITEM, SECTION_HEADER, PROD_GRID, TRANSFORM_GRID }
+    private record Row(ItemStack icon, Component text, RowType type) {
+        boolean isSection() { return type == RowType.SECTION_HEADER; }
+    }
 
-    private final List<Row> rows = new ArrayList<>();
+    // Grid cells for production and transformation sections
+    private record GridCell(ItemStack stack, boolean locked) {}
+
+    private final List<Row>      rows            = new ArrayList<>();
+    private final List<GridCell> productionCells = new ArrayList<>();
+    private final List<GridCell> transformCells  = new ArrayList<>();
+
     private int scrollPx = 0;
     private int totalH   = 0;
 
@@ -83,48 +96,86 @@ public class TownSummaryWidget extends DraggableWidget {
     }
 
     // -------------------------------------------------------------------------
-    // Title bar toggle buttons (I / P / T)
+    // Title bar tab buttons (Info / Log)
     // -------------------------------------------------------------------------
 
-    private int toggleBtnX(int index) {
-        // 0=I, 1=P, 2=T, 3=L -- placed left of the X button with 2px gaps
-        return closeBtnX() - (4 - index) * (TOGGLE_BTN_W + TOGGLE_BTN_GAP);
+    public void setOnBroadcastToggled(Runnable r) { onBroadcastToggled = r; }
+
+    private int tabBtnX(int index) {
+        return x + 1 + index * (TAB_BTN_W + TAB_BTN_GAP);
     }
+
+    private int bellBtnX() {
+        return x + 1 + 2 * (TAB_BTN_W + TAB_BTN_GAP);
+    }
+
+    @Override
+    protected String getTitle() { return ""; }
 
     @Override
     protected void renderTitleBarExtras(GuiGraphics g, int mouseX, int mouseY) {
         var font = Minecraft.getInstance().font;
-        boolean[] states = {blockInfoVisible, blockProductionVisible, blockTransformationVisible, blockLogVisible};
-        for (int i = 0; i < 4; i++) {
-            int bx     = toggleBtnX(i);
-            boolean hover   = mouseX >= bx && mouseX < bx + TOGGLE_BTN_W
-                           && mouseY >= y  && mouseY < y + TITLE_BAR_H;
-            boolean active  = states[i];
-            int bg = active ? (hover ? 0xFF2A5A2A : 0xFF224422)
-                            : (hover ? 0xFF444444 : 0xFF333333);
-            int fg = active ? 0xFFAAFFAA : 0xFF888888;
-            g.fill(bx, y + 1, bx + TOGGLE_BTN_W, y + TITLE_BAR_H - 1, bg);
-            g.drawString(font, TOGGLE_LABELS[i], bx + 2, y + 2, fg, false);
+        boolean[] active = {!showLogs, showLogs};
+        for (int i = 0; i < 2; i++) {
+            int bx = tabBtnX(i);
+            boolean hover = mouseX >= bx && mouseX < bx + TAB_BTN_W
+                         && mouseY >= y  && mouseY < y + TITLE_BAR_H;
+            boolean isActive = active[i];
+            int bg = isActive ? (hover ? 0xFF2A5A2A : 0xFF224422)
+                              : (hover ? 0xFF444444 : 0xFF333333);
+            int fg = isActive ? 0xFFAAFFAA : 0xFF888888;
+            g.fill(bx, y + 1, bx + TAB_BTN_W, y + TITLE_BAR_H - 1, bg);
+            String label = TAB_LABELS[i];
+            int textX = bx + (TAB_BTN_W - font.width(label)) / 2;
+            g.drawString(font, label, textX, y + 2, fg, false);
         }
+
+        // Bell button (chat broadcast toggle)
+        int bbx = bellBtnX();
+        boolean bellHover = mouseX >= bbx && mouseX < bbx + BELL_BTN_W
+                         && mouseY >= y   && mouseY < y + TITLE_BAR_H;
+        int bellBg = chatBroadcastEnabled ? (bellHover ? 0xFF5A4A00 : 0xFF443300)
+                                          : (bellHover ? 0xFF444444 : 0xFF333333);
+        g.fill(bbx, y + 1, bbx + BELL_BTN_W, y + TITLE_BAR_H - 1, bellBg);
+        int bellColor = chatBroadcastEnabled ? 0xFFFFAA00 : 0xFF666666;
+        drawBellIcon(g, bbx, bellColor);
+    }
+
+    private void drawBellIcon(GuiGraphics g, int bx, int color) {
+        int ix = bx + 2;
+        int iy = y + 2;
+        // top knob (1x1)
+        g.fill(ix + 2, iy,     ix + 3, iy + 1, color);
+        // bell cap (3 wide)
+        g.fill(ix + 1, iy + 1, ix + 4, iy + 2, color);
+        // bell sides (left and right, 3 tall)
+        g.fill(ix,     iy + 2, ix + 1, iy + 5, color);
+        g.fill(ix + 4, iy + 2, ix + 5, iy + 5, color);
+        // bell rim (5 wide)
+        g.fill(ix,     iy + 5, ix + 5, iy + 6, color);
+        // clapper (1x1)
+        g.fill(ix + 2, iy + 7, ix + 3, iy + 8, color);
     }
 
     @Override
     protected boolean onTitleBarClick(double mouseX, double mouseY) {
-        for (int i = 0; i < 4; i++) {
-            int bx = toggleBtnX(i);
-            if (mouseX >= bx && mouseX < bx + TOGGLE_BTN_W
+        for (int i = 0; i < 2; i++) {
+            int bx = tabBtnX(i);
+            if (mouseX >= bx && mouseX < bx + TAB_BTN_W
                     && mouseY >= y && mouseY < y + TITLE_BAR_H) {
-                switch (i) {
-                    case 0 -> blockInfoVisible           = !blockInfoVisible;
-                    case 1 -> blockProductionVisible     = !blockProductionVisible;
-                    case 2 -> blockTransformationVisible = !blockTransformationVisible;
-                    case 3 -> blockLogVisible            = !blockLogVisible;
-                }
+                showLogs = (i == 1);
                 rows.clear();
                 buildRows(cachedMapData, cachedSummaryData);
                 scrollPx = 0;
                 return true;
             }
+        }
+        int bbx = bellBtnX();
+        if (mouseX >= bbx && mouseX < bbx + BELL_BTN_W
+                && mouseY >= y && mouseY < y + TITLE_BAR_H) {
+            chatBroadcastEnabled = !chatBroadcastEnabled;
+            if (onBroadcastToggled != null) onBroadcastToggled.run();
+            return true;
         }
         return false;
     }
@@ -136,7 +187,7 @@ public class TownSummaryWidget extends DraggableWidget {
     public void appendLogEntry(TownLogEntry entry) {
         logEntries.addFirst(entry);
         if (logEntries.size() > 20) logEntries.removeLast();
-        if (blockLogVisible) {
+        if (showLogs) {
             rows.clear();
             buildRows(cachedMapData, cachedSummaryData);
         }
@@ -149,7 +200,7 @@ public class TownSummaryWidget extends DraggableWidget {
         for (int i = entries.size() - 1; i >= 0; i--) {
             logEntries.addLast(entries.get(i));
         }
-        if (blockLogVisible) {
+        if (showLogs) {
             rows.clear();
             buildRows(cachedMapData, cachedSummaryData);
         }
@@ -184,16 +235,19 @@ public class TownSummaryWidget extends DraggableWidget {
     // -------------------------------------------------------------------------
 
     private void buildRows(CompoundTag mapData, CompoundTag summaryData) {
-        if (blockLogVisible) {
+        productionCells.clear();
+        transformCells.clear();
+
+        if (showLogs) {
             if (logEntries.isEmpty()) {
-                rows.add(new Row(null, Component.literal("No activity yet.").withStyle(s -> s.withColor(0xFF888888)), false));
+                rows.add(new Row(null, Component.literal("No activity yet.").withStyle(s -> s.withColor(0xFF888888)), RowType.ITEM));
             } else {
                 for (TownLogEntry e : logEntries) {
-                    rows.add(new Row(null, logEntryToComponent(e), false));
+                    rows.add(new Row(null, logEntryToComponent(e), RowType.ITEM));
                 }
             }
             totalH = PADDING;
-            for (Row r : rows) totalH += r.isSection() ? HEADER_H : ITEM_H;
+            for (Row r : rows) totalH += rowHeight(r);
             totalH += PADDING;
             return;
         }
@@ -205,66 +259,75 @@ public class TownSummaryWidget extends DraggableWidget {
         int totalHerd       = summaryData.getInt("TotalHerd");
         int activeHerd      = summaryData.getInt("ActiveHerd");
 
-        if (blockInfoVisible) {
-            rows.add(new Row(null,
-                Component.literal("Orientation: " + capitalize(orientation))
-                    .withStyle(s -> s.withColor(COLOR_ORIENT_TEXT)),
-                false));
+        rows.add(new Row(null,
+            Component.literal("Orientation: " + capitalize(orientation))
+                .withStyle(s -> s.withColor(COLOR_ORIENT_TEXT)),
+            RowType.ITEM));
 
-            if (totalResidents > 0) {
-                int resColor = activeResidents >= totalResidents ? 0xFF55FF55
-                             : activeResidents * 2 >= totalResidents ? 0xFFFFAA00
-                             : 0xFFFF5555;
-                Item egg = BuiltInRegistries.ITEM.get(new ResourceLocation("minecraft:villager_spawn_egg"));
-                MutableComponent txt = Component.literal("Residents: ")
-                    .withStyle(s -> s.withColor(0xFFCCCCCC))
-                    .append(Component.literal(String.valueOf(activeResidents)).withStyle(s -> s.withColor(resColor)))
-                    .append(Component.literal(" / " + totalResidents).withStyle(s -> s.withColor(0xFFCCCCCC)));
-                rows.add(new Row(new ItemStack(egg), txt, false));
-            }
-
-            if (totalHerd > 0) {
-                int herdColor = activeHerd >= totalHerd ? 0xFF55FF55
-                              : activeHerd * 2 >= totalHerd ? 0xFFFFAA00
-                              : 0xFFFF5555;
-                Item pig = BuiltInRegistries.ITEM.get(new ResourceLocation("minecraft:pig_spawn_egg"));
-                MutableComponent txt = Component.literal("Herd: ")
-                    .withStyle(s -> s.withColor(0xFFCCCCCC))
-                    .append(Component.literal(String.valueOf(activeHerd)).withStyle(s -> s.withColor(herdColor)))
-                    .append(Component.literal(" / " + totalHerd).withStyle(s -> s.withColor(0xFFCCCCCC)));
-                rows.add(new Row(new ItemStack(pig), txt, false));
-            }
-
-            if (totalFoodDemand > 0) {
-                rows.add(new Row(new ItemStack(Items.BREAD),
-                    Component.literal(totalFoodDemand + " food units / day").withStyle(s -> s.withColor(0xFFDDDDDD)),
-                    false));
-            }
+        if (totalResidents > 0) {
+            int resColor = activeResidents >= totalResidents ? 0xFF55FF55
+                         : activeResidents * 2 >= totalResidents ? 0xFFFFAA00
+                         : 0xFFFF5555;
+            Item egg = BuiltInRegistries.ITEM.get(new ResourceLocation("minecraft:villager_spawn_egg"));
+            MutableComponent txt = Component.literal("Residents: ")
+                .withStyle(s -> s.withColor(0xFFCCCCCC))
+                .append(Component.literal(String.valueOf(activeResidents)).withStyle(s -> s.withColor(resColor)))
+                .append(Component.literal(" / " + totalResidents).withStyle(s -> s.withColor(0xFFCCCCCC)));
+            rows.add(new Row(new ItemStack(egg), txt, RowType.ITEM));
         }
 
-        Map<String, int[]> prodData   = new LinkedHashMap<>();
-        Map<String, int[]> transforms = new LinkedHashMap<>();
+        if (totalHerd > 0) {
+            int herdColor = activeHerd >= totalHerd ? 0xFF55FF55
+                          : activeHerd * 2 >= totalHerd ? 0xFFFFAA00
+                          : 0xFFFF5555;
+            Item pig = BuiltInRegistries.ITEM.get(new ResourceLocation("minecraft:pig_spawn_egg"));
+            MutableComponent txt = Component.literal("Herd: ")
+                .withStyle(s -> s.withColor(0xFFCCCCCC))
+                .append(Component.literal(String.valueOf(activeHerd)).withStyle(s -> s.withColor(herdColor)))
+                .append(Component.literal(" / " + totalHerd).withStyle(s -> s.withColor(0xFFCCCCCC)));
+            rows.add(new Row(new ItemStack(pig), txt, RowType.ITEM));
+        }
+
+        if (totalFoodDemand > 0) {
+            rows.add(new Row(new ItemStack(Items.BREAD),
+                Component.literal(totalFoodDemand + " food units / day").withStyle(s -> s.withColor(0xFFDDDDDD)),
+                RowType.ITEM));
+        }
+
+        Map<String, int[]> prodData         = new LinkedHashMap<>();
+        Map<String, int[]> lockedProdData   = new LinkedHashMap<>();
+        Map<String, int[]> transforms       = new LinkedHashMap<>();
+        Map<String, int[]> lockedTransforms = new LinkedHashMap<>();
 
         ListTag elements = mapData.getList("Elements", Tag.TAG_COMPOUND);
         for (Tag rawEl : elements) {
             CompoundTag el = (CompoundTag) rawEl;
             if (el.getByte("Category") != 2) continue;
 
-            if (blockProductionVisible) {
-                for (Tag rawP : el.getList("Production", Tag.TAG_COMPOUND)) {
-                    CompoundTag pt = (CompoundTag) rawP;
-                    String itemId  = pt.getString("Item");
-                    int amount     = pt.getInt("Amount");
-                    int ticks      = pt.getInt("EveryTicks");
+            for (Tag rawP : el.getList("Production", Tag.TAG_COMPOUND)) {
+                CompoundTag pt = (CompoundTag) rawP;
+                String itemId  = pt.getString("Item");
+                int amount     = pt.getInt("Amount");
+                int ticks      = pt.getInt("EveryTicks");
+                boolean locked = pt.getBoolean("Locked");
+                if (locked) {
+                    lockedProdData.merge(itemId, new int[]{amount, ticks},
+                        (a, b) -> new int[]{a[0] + b[0], a[1]});
+                } else {
                     prodData.merge(itemId, new int[]{amount, ticks},
                         (a, b) -> new int[]{a[0] + b[0], a[1]});
                 }
             }
 
-            if (blockTransformationVisible) {
-                for (Tag rawT : el.getList("Transforms", Tag.TAG_COMPOUND)) {
-                    CompoundTag tt = (CompoundTag) rawT;
-                    String outId   = tt.getString("OutputItem");
+            for (Tag rawT : el.getList("Transforms", Tag.TAG_COMPOUND)) {
+                CompoundTag tt = (CompoundTag) rawT;
+                String outId   = tt.getString("OutputItem");
+                boolean locked = tt.getBoolean("Locked");
+                if (locked) {
+                    if (!lockedTransforms.containsKey(outId)) {
+                        lockedTransforms.put(outId, new int[]{tt.getInt("OutputAmount"), tt.getInt("EveryTicks")});
+                    }
+                } else {
                     if (!transforms.containsKey(outId)) {
                         transforms.put(outId, new int[]{tt.getInt("OutputAmount"), tt.getInt("EveryTicks")});
                     }
@@ -272,42 +335,67 @@ public class TownSummaryWidget extends DraggableWidget {
             }
         }
 
-        if (!prodData.isEmpty()) {
-            rows.add(new Row(null, Component.literal("Production").withStyle(s -> s.withColor(COLOR_SECTION_TEXT)), true));
+        if (!prodData.isEmpty() || !lockedProdData.isEmpty()) {
+            rows.add(new Row(null, Component.literal("Produces / min").withStyle(s -> s.withColor(COLOR_SECTION_TEXT)), RowType.SECTION_HEADER));
+            rows.add(new Row(null, null, RowType.PROD_GRID));
             for (Map.Entry<String, int[]> e : prodData.entrySet()) {
-                Item item    = BuiltInRegistries.ITEM.get(new ResourceLocation(e.getKey()));
-                int amount   = e.getValue()[0];
-                int seconds  = e.getValue()[1] / 20;
-                rows.add(new Row(new ItemStack(item),
-                    Component.literal("x" + amount + " " + shortId(e.getKey()) + " / " + seconds + "s")
-                        .withStyle(s -> s.withColor(0xFFDDDDDD)),
-                    false));
+                Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(e.getKey()));
+                int displayCount = perMinCount(e.getValue()[0], e.getValue()[1]);
+                productionCells.add(new GridCell(new ItemStack(item, displayCount), false));
+            }
+            for (Map.Entry<String, int[]> e : lockedProdData.entrySet()) {
+                if (prodData.containsKey(e.getKey())) continue;
+                Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(e.getKey()));
+                int displayCount = perMinCount(e.getValue()[0], e.getValue()[1]);
+                productionCells.add(new GridCell(new ItemStack(item, displayCount), true));
             }
         }
 
-        if (!transforms.isEmpty()) {
-            rows.add(new Row(null, Component.literal("Transformations").withStyle(s -> s.withColor(COLOR_SECTION_TEXT)), true));
+        if (!transforms.isEmpty() || !lockedTransforms.isEmpty()) {
+            rows.add(new Row(null, Component.literal("Transforms / min").withStyle(s -> s.withColor(COLOR_SECTION_TEXT)), RowType.SECTION_HEADER));
+            rows.add(new Row(null, null, RowType.TRANSFORM_GRID));
             for (Map.Entry<String, int[]> e : transforms.entrySet()) {
-                Item item   = BuiltInRegistries.ITEM.get(new ResourceLocation(e.getKey()));
-                int seconds = e.getValue()[1] / 20;
-                rows.add(new Row(new ItemStack(item),
-                    Component.literal("x" + e.getValue()[0] + " " + shortId(e.getKey()) + " / " + seconds + "s")
-                        .withStyle(s -> s.withColor(0xFFDDDDDD)),
-                    false));
+                Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(e.getKey()));
+                int displayCount = perMinCount(e.getValue()[0], e.getValue()[1]);
+                transformCells.add(new GridCell(new ItemStack(item, displayCount), false));
+            }
+            for (Map.Entry<String, int[]> e : lockedTransforms.entrySet()) {
+                if (transforms.containsKey(e.getKey())) continue;
+                Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(e.getKey()));
+                int displayCount = perMinCount(e.getValue()[0], e.getValue()[1]);
+                transformCells.add(new GridCell(new ItemStack(item, displayCount), true));
             }
         }
 
         totalH = PADDING;
-        for (Row r : rows) totalH += r.isSection() ? HEADER_H : ITEM_H;
+        for (Row r : rows) totalH += rowHeight(r);
         totalH += PADDING;
+    }
+
+    // Converts amount+ticks to per-minute integer, minimum 1.
+    private static int perMinCount(int amount, int ticks) {
+        if (ticks <= 0) return amount;
+        float perMin = amount * (1200.0f / ticks);
+        return Math.max(1, Math.round(perMin));
+    }
+
+    private int rowHeight(Row r) {
+        return switch (r.type()) {
+            case SECTION_HEADER -> HEADER_H;
+            case PROD_GRID      -> gridHeight(productionCells.size());
+            case TRANSFORM_GRID -> gridHeight(transformCells.size());
+            case ITEM           -> ITEM_H;
+        };
+    }
+
+    private static int gridHeight(int cellCount) {
+        if (cellCount == 0) return 0;
+        return (int) Math.ceil(cellCount / (double) MAX_COLS) * CELL_SIZE;
     }
 
     // -------------------------------------------------------------------------
     // Rendering
     // -------------------------------------------------------------------------
-
-    @Override
-    protected String getTitle() { return "Summary"; }
 
     @Override
     protected void renderContent(GuiGraphics g, int cx, int cy, int cw, int ch,
@@ -323,16 +411,23 @@ public class TownSummaryWidget extends DraggableWidget {
         int rowY = cy + PADDING - scrollPx;
 
         for (Row row : rows) {
-            int rh = row.isSection() ? HEADER_H : ITEM_H;
+            int rh = rowHeight(row);
             if (rowY + rh > cy && rowY < cy + ch) {
-                if (row.isSection()) {
-                    g.fill(cx, rowY, cx + contentW, rowY + rh, COLOR_HEADER_BG);
-                    g.drawString(font, row.text(), cx + 4, rowY + 2, 0xFFFFFFFF, false);
-                } else if (row.icon() != null && !row.icon().isEmpty()) {
-                    g.renderFakeItem(row.icon(), cx + 2, rowY);
-                    g.drawString(font, row.text(), cx + 20, rowY + 4, 0xFFFFFFFF, false);
-                } else {
-                    g.drawString(font, row.text(), cx + 4, rowY + 2, 0xFFFFFFFF, false);
+                switch (row.type()) {
+                    case SECTION_HEADER -> {
+                        g.fill(cx, rowY, cx + contentW, rowY + rh, COLOR_HEADER_BG);
+                        g.drawString(font, row.text(), cx + 4, rowY + 2, 0xFFFFFFFF, false);
+                    }
+                    case PROD_GRID      -> renderGrid(g, productionCells, cx, rowY, contentW);
+                    case TRANSFORM_GRID -> renderGrid(g, transformCells,  cx, rowY, contentW);
+                    case ITEM           -> {
+                        if (row.icon() != null && !row.icon().isEmpty()) {
+                            g.renderFakeItem(row.icon(), cx + 2, rowY);
+                            g.drawString(font, row.text(), cx + 20, rowY + 4, 0xFFFFFFFF, false);
+                        } else {
+                            g.drawString(font, row.text(), cx + 4, rowY + 2, 0xFFFFFFFF, false);
+                        }
+                    }
                 }
             }
             rowY += rh;
@@ -355,6 +450,24 @@ public class TownSummaryWidget extends DraggableWidget {
                            : thumbHover        ? 0xCCCCCCCC
                            :                    0x99AAAAAA;
             g.fill(trackX, thumbY, cx + cw, thumbY + thumbH, thumbColor);
+        }
+    }
+
+    private void renderGrid(GuiGraphics g, List<GridCell> cells, int cx, int rowY, int contentW) {
+        for (int i = 0; i < cells.size(); i++) {
+            int col   = i % MAX_COLS;
+            int row   = i / MAX_COLS;
+            int cellX = cx + col * CELL_SIZE;
+            int cellY = rowY + row * CELL_SIZE;
+            GridCell cell = cells.get(i);
+            g.renderFakeItem(cell.stack(), cellX + 1, cellY + 1);
+            g.renderItemDecorations(Minecraft.getInstance().font, cell.stack(), cellX + 1, cellY + 1);
+            if (cell.locked()) {
+                g.pose().pushPose();
+                g.pose().translate(0, 0, 200);
+                NbtPreviewWidget.drawPadlockIcon(g, cellX + 5, cellY + 4);
+                g.pose().popPose();
+            }
         }
     }
 
@@ -426,18 +539,5 @@ public class TownSummaryWidget extends DraggableWidget {
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return "Unknown";
         return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase();
-    }
-
-    private static String shortId(String resourceId) {
-        if (resourceId == null || resourceId.isEmpty()) return "";
-        int colon = resourceId.indexOf(':');
-        String raw = colon >= 0 ? resourceId.substring(colon + 1) : resourceId;
-        String[] parts = raw.split("_");
-        StringBuilder sb = new StringBuilder();
-        for (String p : parts) {
-            if (!sb.isEmpty()) sb.append(" ");
-            if (!p.isEmpty()) sb.append(Character.toUpperCase(p.charAt(0))).append(p.substring(1));
-        }
-        return sb.toString();
     }
 }

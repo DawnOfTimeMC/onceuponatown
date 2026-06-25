@@ -52,14 +52,18 @@ public class Town {
     // Runtime-only claim map: queue index -> builder UUID. Prevents two builders from picking the same entry.
     // Not persisted: claims are re-established on the next idle tick after a server restart.
     private final Map<Integer, UUID> queueIndexClaims = new HashMap<>();
+    private long nextEntryId = 0L;
     private String name = "Unknown Town";
     private final List<Quest> activeQuests = new ArrayList<>();
-    // NOTE quest def IDs that have already been shown. Once a NOTE is dismissed it never spawns again.
-    private final Set<String> dismissedNoteIds = new HashSet<>();
+    // Tracks when each TASK quest def was last completed (def id -> game time).
+    private final Map<String, Long> questDefLastCompleted = new HashMap<>();
 
     // Sliding window of the last 20 activity events; persisted to NBT.
     private final ArrayDeque<TownLogEntry> activityLog = new ArrayDeque<>();
     private static final int LOG_MAX = 20;
+
+    // Players who opted in to receiving village log entries as chat messages. Persisted to NBT.
+    private final Set<UUID> chatSubscribers = new HashSet<>();
 
     // Player-ordered queue of construction tasks (new builds and upgrades).
     // Resources are pre-reserved in queueReservedStock when an entry is added.
@@ -81,16 +85,19 @@ public class Town {
     private final Set<String> unlockedBuildingIds = new HashSet<>();
     // Fed portion of total residents, updated each dawn tick. Persisted to NBT.
     private int activeResidents = 0;
-    // Weight cost per building category, sourced from the era 0 data file. Persisted to NBT.
-    private final Map<String, Integer> categoryWeights = new HashMap<>();
     // Current weight cap. Starts at initial_max_weight (era 0 file) and grows with each transition. Persisted to NBT.
     private int currentMaxWeight = 0;
     // Active build states keyed by builder slot index. Persisted so builds survive server restarts.
     private final Map<Integer, ActiveBuildState> activeBuilds = new HashMap<>();
+    // Monotonically increasing counter stamped onto each ConnectionPoint when added to freeConnections.
+    // Allows sorting by insertion age: lower = older = closer to the village center.
+    private long cpInsertionCounter = 0;
 
     public void registerBuilding(BlockPos worldPos, String defId, List<ConnectionPoint> connections, BoundingBox bb, Rotation rotation) {
         buildings.add(new PlacedBuilding(defId, worldPos, bb, rotation));
-        freeConnections.addAll(connections);
+        for (ConnectionPoint cp : connections) {
+            freeConnections.add(new ConnectionPoint(cp.pos(), cp.direction(), cp.targetName(), cpInsertionCounter++));
+        }
         // Remove phantom CPs whose expansion block falls inside the new building's footprint.
         // These are open connectors that point into already-occupied space and can never be used.
         if (bb != null) {
@@ -140,7 +147,7 @@ public class Town {
     private boolean villageFullNotified = false;
 
     public void addFreeConnection(ConnectionPoint point) {
-        freeConnections.add(point);
+        freeConnections.add(new ConnectionPoint(point.pos(), point.direction(), point.targetName(), cpInsertionCounter++));
         villageFullNotified = false;
     }
 
@@ -177,23 +184,15 @@ public class Town {
         for (PlacedBuilding b : buildings) {
             BuildingDef def = BuildingDataHandler.get(b.defId).orElse(null);
             if (def == null) continue;
-            total += weightForCategory(def.category);
+            total += def.weight;
         }
         for (QueueEntry entry : constructionQueue) {
             if (entry instanceof QueueEntry.NewBuild nb) {
                 BuildingDef def = BuildingDataHandler.get(nb.defId()).orElse(null);
-                if (def != null) total += weightForCategory(def.category);
+                if (def != null) total += def.weight;
             }
         }
         return total;
-    }
-
-    private int weightForCategory(String category) {
-        if (categoryWeights.isEmpty()) {
-            LOGGER.error("[OUAT] categoryWeights is empty - era def may not have loaded correctly");
-            return 0;
-        }
-        return categoryWeights.getOrDefault(category, 0);
     }
 
     public int getCurrentEra() { return currentEra; }
@@ -201,25 +200,16 @@ public class Town {
     public Set<String> getUnlockedBuildingIds() { return Collections.unmodifiableSet(unlockedBuildingIds); }
 
     public int getCurrentMaxWeight() { return currentMaxWeight; }
-    public Map<String, Integer> getCategoryWeights() { return Collections.unmodifiableMap(categoryWeights); }
     public List<BoundingBox> getBlockedZones() { return Collections.unmodifiableList(blockedZones); }
     public boolean isUnderUpgrade(BlockPos pos) { return underUpgrade.contains(pos); }
 
-    public int getMaxActiveQuests() {
-        EraDef def = EraTransitionDataHandler.getEraDefByOrientation(getOrDeriveOrientation());
-        return def != null ? def.maxActiveQuests : 1;
-    }
-
-    // Seeds categoryWeights and currentMaxWeight from the matched era 0 data file.
+    // Seeds currentMaxWeight from the matched era 0 data file.
     // Called once at world gen after all starter buildings are registered.
     public void initFromEraDef() {
         String orientation = getOrDeriveOrientation();
         if (orientation.isEmpty()) return;
         EraDef def = EraTransitionDataHandler.getEraDefByOrientation(orientation);
         if (def == null) return;
-        if (categoryWeights.isEmpty() && !def.categoryWeights.isEmpty()) {
-            categoryWeights.putAll(def.categoryWeights);
-        }
         if (def.initialMaxWeight > 0) {
             currentMaxWeight = def.initialMaxWeight;
         }
@@ -375,7 +365,7 @@ public class Town {
         BuildingDef def = BuildingDataHandler.get(defId).orElse(null);
         if (def == null || constructionQueue.size() >= QUEUE_CAPACITY) return false;
         // Weight cap: block new builds (not upgrades) that would exceed the era limit.
-        if (getCurrentWeight() + weightForCategory(def.category) > getCurrentMaxWeight()) return false;
+        if (getCurrentWeight() + def.weight > getCurrentMaxWeight()) return false;
         TownInventory inv = getTownInventory();
         for (ItemCost cost : def.constructionCost) {
             if (inv.getStock(cost.item()) < cost.amount()) return false;
@@ -384,15 +374,13 @@ public class Town {
         for (ItemCost cost : def.constructionCost) {
             queueReservedStock.merge(cost.item(), cost.amount(), Integer::sum);
         }
-        constructionQueue.add(new QueueEntry.NewBuild(defId));
+        constructionQueue.add(new QueueEntry.NewBuild(nextEntryId++, defId));
         return true;
     }
 
     // Checks affordability and appends an Upgrade entry to the queue.
-    // Returns false if: building not found, already at max level (including pending upgrades),
-    // queue full, or insufficient stock.
-    // Multiple upgrades for the same building are allowed: each gets a fromLevel incremented
-    // by the number of pending upgrades already queued for that building.
+    // Returns false if: building not found, already at max level, upgrade already pending,
+    // queue full, or insufficient stock. Only one upgrade per building can be queued at a time.
     public boolean tryQueueUpgrade(BlockPos worldPos) {
         PlacedBuilding building = null;
         for (PlacedBuilding b : buildings) {
@@ -403,14 +391,14 @@ public class Town {
         BuildingDef def = BuildingDataHandler.get(building.defId).orElse(null);
         if (def == null || (def.upgrades.isEmpty() && def.nbtLevels.isEmpty())) return false;
 
-        // Compute effective level after all upgrades already pending in the queue.
-        int effectiveLevel = building.getUpgradeLevel();
+        // Block if an upgrade for this building is already pending in the queue.
         for (QueueEntry entry : constructionQueue) {
             if (entry instanceof QueueEntry.Upgrade u && u.buildingWorldPos().equals(worldPos)) {
-                effectiveLevel++;
+                return false;
             }
         }
 
+        int effectiveLevel = building.getUpgradeLevel();
         int maxLevel = Math.max(def.upgrades.size(), def.nbtLevels.size());
         if (effectiveLevel >= maxLevel) return false;
         if (constructionQueue.size() >= QUEUE_CAPACITY) return false;
@@ -426,7 +414,7 @@ public class Town {
         for (ItemCost c : cost) {
             queueReservedStock.merge(c.item(), c.amount(), Integer::sum);
         }
-        constructionQueue.add(new QueueEntry.Upgrade(building.defId, worldPos, effectiveLevel));
+        constructionQueue.add(new QueueEntry.Upgrade(nextEntryId++, building.defId, worldPos, effectiveLevel));
         return true;
     }
 
@@ -453,7 +441,7 @@ public class Town {
         if (effectiveLevel >= maxLevel) return false;
         if (constructionQueue.size() >= QUEUE_CAPACITY) return false;
 
-        constructionQueue.add(new QueueEntry.Upgrade(building.defId, worldPos, effectiveLevel));
+        constructionQueue.add(new QueueEntry.Upgrade(nextEntryId++, building.defId, worldPos, effectiveLevel));
         return true;
     }
 
@@ -471,15 +459,24 @@ public class Town {
             }
         }
         constructionQueue.remove(index);
+        shiftClaimsAfter(index);
         return true;
     }
 
     // Called by NPC after successfully processing a queued entry.
     // Removes the entry from the queue and clears its resource reservation.
+    public int findQueueIndex(long entryId) {
+        for (int i = 0; i < constructionQueue.size(); i++) {
+            if (constructionQueue.get(i).entryId() == entryId) return i;
+        }
+        return -1;
+    }
+
     public void consumeQueueEntry(QueueEntry entry) {
-        int idx = constructionQueue.indexOf(entry);
+        int idx = findQueueIndex(entry.entryId());
         if (idx >= 0) {
             constructionQueue.remove(idx);
+            shiftClaimsAfter(idx);
         }
         // Always drain the reservation even if entry was already removed by the player.
         List<ItemCost> cost = getEntryCost(entry);
@@ -614,15 +611,31 @@ public class Town {
         return List.copyOf(activityLog);
     }
 
+    public void addChatSubscriber(UUID playerId)    { chatSubscribers.add(playerId); }
+    public void removeChatSubscriber(UUID playerId) { chatSubscribers.remove(playerId); }
+    public boolean isChatSubscriber(UUID playerId)  { return chatSubscribers.contains(playerId); }
+    public Set<UUID> getChatSubscribers()           { return Collections.unmodifiableSet(chatSubscribers); }
+
     public List<Quest> getActiveQuests() { return Collections.unmodifiableList(activeQuests); }
 
     public void addQuest(Quest q) { activeQuests.add(q); }
 
     public void removeQuest(String questId) { activeQuests.removeIf(q -> q.questId.equals(questId)); }
 
-    public Set<String> getDismissedNoteIds() { return Collections.unmodifiableSet(dismissedNoteIds); }
+    public Map<String, Long> getQuestDefLastCompleted() { return questDefLastCompleted; }
 
-    public void addDismissedNote(String defId) { dismissedNoteIds.add(defId); }
+    // Removes activeQuests and questDefLastCompleted entries whose definition no longer exists.
+    // Called at world load after datapacks have been read. Returns true if anything was removed.
+    public boolean cleanupOrphanedQuestData(Set<String> validDefIds) {
+        boolean changed = activeQuests.removeIf(q -> {
+            if (validDefIds.contains(q.defId)) return false;
+            LOGGER.warn("[OUAT] Removing orphaned quest {}", q.defId);
+            return true;
+        });
+        int sizeBefore = questDefLastCompleted.size();
+        questDefLastCompleted.keySet().retainAll(validDefIds);
+        return changed || questDefLastCompleted.size() != sizeBefore;
+    }
 
     // Tries to add item to town stock without checking the accepted set.
     // Used after quest consumption to route any remainder into stock.
@@ -709,6 +722,24 @@ public class Town {
         queueIndexClaims.remove(index, builderId);
     }
 
+    public void releaseAllClaimsForBuilder(UUID builderId) {
+        queueIndexClaims.values().removeIf(id -> id.equals(builderId));
+    }
+
+    // After removing an entry at removedIdx, shift all claims at higher indices down by one
+    // so they remain aligned with the new positions of their entries in the queue.
+    private void shiftClaimsAfter(int removedIdx) {
+        Map<Integer, UUID> shifted = new HashMap<>();
+        queueIndexClaims.entrySet().removeIf(e -> {
+            if (e.getKey() > removedIdx) {
+                shifted.put(e.getKey() - 1, e.getValue());
+                return true;
+            }
+            return false;
+        });
+        queueIndexClaims.putAll(shifted);
+    }
+
     public boolean isQueueEntryClaimedByOther(int index, UUID builderId) {
         UUID existing = queueIndexClaims.get(index);
         return existing != null && !existing.equals(builderId);
@@ -761,15 +792,14 @@ public class Town {
         tag.put("UnlockedBuildingIds", unlockedTag);
         tag.putInt("ActiveResidents", activeResidents);
         tag.putInt("CurrentMaxWeight", currentMaxWeight);
-        CompoundTag cwTag = new CompoundTag();
-        categoryWeights.forEach(cwTag::putInt);
-        tag.put("CategoryWeights", cwTag);
         ListTag activeQuestsTag = new ListTag();
         activeQuests.forEach(q -> activeQuestsTag.add(q.toNbt()));
         tag.put("ActiveQuests", activeQuestsTag);
-        ListTag dismissedTag = new ListTag();
-        dismissedNoteIds.forEach(id -> dismissedTag.add(StringTag.valueOf(id)));
-        tag.put("DismissedNotes", dismissedTag);
+        if (!questDefLastCompleted.isEmpty()) {
+            CompoundTag qdlcTag = new CompoundTag();
+            questDefLastCompleted.forEach(qdlcTag::putLong);
+            tag.put("QuestDefLastCompleted", qdlcTag);
+        }
         if (!activityLog.isEmpty()) {
             ListTag logTag = new ListTag();
             for (TownLogEntry e : activityLog) {
@@ -786,6 +816,13 @@ public class Town {
             activeBuilds.forEach((slot, state) -> activeBuildsTag.put(String.valueOf(slot), activeBuildStateToNbt(state)));
             tag.put("ActiveBuilds", activeBuildsTag);
         }
+        if (!chatSubscribers.isEmpty()) {
+            ListTag subsTag = new ListTag();
+            chatSubscribers.forEach(id -> subsTag.add(StringTag.valueOf(id.toString())));
+            tag.put("ChatSubscribers", subsTag);
+        }
+        tag.putLong("CpInsertionCounter", cpInsertionCounter);
+        tag.putLong("NextEntryId", nextEntryId);
         return tag;
     }
 
@@ -807,6 +844,7 @@ public class Town {
             .forEach(t -> town.buildings.add(PlacedBuilding.fromNbt((CompoundTag) t)));
         tag.getList("FreeConnections", Tag.TAG_COMPOUND)
             .forEach(t -> town.freeConnections.add(connectionFromNbt((CompoundTag) t)));
+        town.cpInsertionCounter = tag.contains("CpInsertionCounter") ? tag.getLong("CpInsertionCounter") : (long) town.freeConnections.size();
         if (tag.contains("ReserveStock")) {
             CompoundTag reserveTag = tag.getCompound("ReserveStock");
             for (String key : reserveTag.getAllKeys()) {
@@ -830,8 +868,25 @@ public class Town {
             } else {
                 // Backward compat: old saves stored plain string defIds
                 tag.getList("ConstructionQueue", Tag.TAG_STRING)
-                    .forEach(t -> town.constructionQueue.add(new QueueEntry.NewBuild(t.getAsString())));
+                    .forEach(t -> town.constructionQueue.add(new QueueEntry.NewBuild(0L, t.getAsString())));
             }
+        }
+        // Backward compat: old saves have no NextEntryId -- reassign sequential IDs to all entries.
+        if (tag.contains("NextEntryId")) {
+            town.nextEntryId = tag.getLong("NextEntryId");
+        } else {
+            long seq = 0L;
+            List<QueueEntry> restamped = new ArrayList<>();
+            for (QueueEntry e : town.constructionQueue) {
+                if (e instanceof QueueEntry.NewBuild nb)
+                    restamped.add(new QueueEntry.NewBuild(seq++, nb.defId()));
+                else if (e instanceof QueueEntry.Upgrade u)
+                    restamped.add(new QueueEntry.Upgrade(seq++, u.defId(), u.buildingWorldPos(), u.fromLevel()));
+                else restamped.add(e);
+            }
+            town.constructionQueue.clear();
+            town.constructionQueue.addAll(restamped);
+            town.nextEntryId = seq;
         }
         if (tag.contains("QueueReservedStock")) {
             CompoundTag qrTag = tag.getCompound("QueueReservedStock");
@@ -852,19 +907,15 @@ public class Town {
         town.currentMaxWeight = tag.contains("CurrentMaxWeight")
             ? tag.getInt("CurrentMaxWeight")
             : 20 + town.currentEra * 10;
-        if (tag.contains("CategoryWeights")) {
-            CompoundTag cwTag = tag.getCompound("CategoryWeights");
-            for (String key : cwTag.getAllKeys()) {
-                town.categoryWeights.put(key, cwTag.getInt(key));
-            }
-        }
         if (tag.contains("ActiveQuests")) {
             tag.getList("ActiveQuests", Tag.TAG_COMPOUND)
                 .forEach(t -> town.activeQuests.add(Quest.fromNbt((CompoundTag) t)));
         }
-        if (tag.contains("DismissedNotes")) {
-            tag.getList("DismissedNotes", Tag.TAG_STRING)
-                .forEach(t -> town.dismissedNoteIds.add(t.getAsString()));
+        if (tag.contains("QuestDefLastCompleted")) {
+            CompoundTag qdlcTag = tag.getCompound("QuestDefLastCompleted");
+            for (String key : qdlcTag.getAllKeys()) {
+                town.questDefLastCompleted.put(key, qdlcTag.getLong(key));
+            }
         }
         if (tag.contains("ActivityLog")) {
             tag.getList("ActivityLog", Tag.TAG_COMPOUND).forEach(t -> {
@@ -885,6 +936,12 @@ public class Town {
                 } catch (NumberFormatException ignored) {}
             }
         }
+        if (tag.contains("ChatSubscribers")) {
+            tag.getList("ChatSubscribers", Tag.TAG_STRING).forEach(t -> {
+                try { town.chatSubscribers.add(UUID.fromString(t.getAsString())); }
+                catch (IllegalArgumentException ignored) {}
+            });
+        }
         return town;
     }
 
@@ -893,6 +950,7 @@ public class Town {
         tag.put("Pos", NbtUtils.writeBlockPos(c.pos()));
         tag.putString("Dir", c.direction().getName());
         tag.putString("Pool", c.targetName());
+        tag.putLong("Order", c.insertionOrder());
         return tag;
     }
 
@@ -900,7 +958,8 @@ public class Town {
         BlockPos pos = NbtUtils.readBlockPos(tag.getCompound("Pos"));
         net.minecraft.core.Direction dir = net.minecraft.core.Direction.byName(tag.getString("Dir"));
         String pool = tag.getString("Pool");
-        return new ConnectionPoint(pos, dir != null ? dir : net.minecraft.core.Direction.NORTH, pool);
+        long order = tag.getLong("Order");
+        return new ConnectionPoint(pos, dir != null ? dir : net.minecraft.core.Direction.NORTH, pool, order);
     }
 
     private static CompoundTag activeBuildStateToNbt(ActiveBuildState s) {
@@ -921,6 +980,7 @@ public class Town {
         }
         tag.put("Cost", costTag);
         if (s.queueDefId() != null) tag.putString("QueueDefId", s.queueDefId());
+        if (s.queueEntryId() >= 0) tag.putLong("QueueEntryId", s.queueEntryId());
         return tag;
     }
 
@@ -946,7 +1006,8 @@ public class Town {
             }
         }
         String queueDefId = tag.contains("QueueDefId") ? tag.getString("QueueDefId") : null;
+        long queueEntryId = tag.contains("QueueEntryId") ? tag.getLong("QueueEntryId") : -1L;
         return new ActiveBuildState(defId, placementPos, rotation, connectionPos, connectionDir,
-            connectionTarget, entryConnectorPos, cost, queueDefId);
+            connectionTarget, entryConnectorPos, cost, queueDefId, queueEntryId);
     }
 }

@@ -1,6 +1,6 @@
 {
   "walk_speed": 0.6,
-  "block_reach_distance": 6.0,
+  "block_reach_distance": 7.0,
   "block_delay_ticks": 4,
   "burst_pause_min_ticks": 10,
   "burst_pause_max_ticks": 18,
@@ -10,5 +10,32 @@
   "path_refresh_interval_ticks": 20,
   "plan_read_chance": 0.03,
   "plan_read_min_ticks": 15,
-  "plan_read_max_ticks": 35
+  "plan_read_max_ticks": 35,
+
+  "secondary_activities": [
+    {
+      "requiredBuilding": "wild_stone",
+      "heldItem": "minecraft:wooden_pickaxe",
+      "animationType": "MINE",
+      "target_block": "minecraft:stone"
+    },
+    {
+      "requiredBuilding": "stone_breach",
+      "heldItem": "minecraft:wooden_pickaxe",
+      "animationType": "MINE",
+      "target_block": "minecraft:stone"
+    },
+    {
+      "requiredBuilding": "workshop",
+      "heldItem": "minecraft:oak_planks",
+      "animationType": "CRAFT",
+      "target_block": "minecraft:crafting_table"
+    },
+    {
+      "requiredBuilding": "oven",
+      "heldItem": "minecraft:oak_planks",
+      "animationType": "CRAFT",
+      "target_block": "minecraft:crafting_table"
+    }
+  ]
 }

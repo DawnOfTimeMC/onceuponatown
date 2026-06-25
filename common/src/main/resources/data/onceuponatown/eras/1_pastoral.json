@@ -4,7 +4,6 @@
   "orientation_label": "Pastoral",
   "structure_label": "Settlement",
   "icon_item": "minecraft:beef",
-  "max_active_quests": 1,
 
   "min_weight_percent": 90,
   "weight_cap_increase": 10,

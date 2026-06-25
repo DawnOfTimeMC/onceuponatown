@@ -4,10 +4,10 @@
   "orientation_label": "Agricultural",
   "structure_label": "Settlement",
   "icon_item": "minecraft:wheat",
-  "max_active_quests": 1,
 
   "min_weight_percent": 90,
   "weight_cap_increase": 10,
+
   "resource_cost": [
     { "item": "minecraft:oak_log", "amount": 20 }
   ],
@@ -15,6 +15,6 @@
   "required_buildings": [
     { "defId": "wheat_field", "count": 1 }
   ],
-  "unlocked_building_ids": ["sheep_field", "well", "wild_spot"],
+  "unlocked_building_ids": ["sheep_field", "wheat_farm", "well", "wild_spot"],
   "auto_upgrade_ids": ["settlement_3"]
 }

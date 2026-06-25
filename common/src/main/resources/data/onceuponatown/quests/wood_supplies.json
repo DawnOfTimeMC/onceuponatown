@@ -1,0 +1,21 @@
+{
+  "id": "onceuponatown:wood_supplies",
+  "type": "TASK",
+  "title": "quest.onceuponatown.wood_supplies.title",
+  "description": "quest.onceuponatown.wood_supplies.desc",
+  "refresh_interval_ticks": 7000,
+
+  "prerequisites": {
+    "min_era": 0,
+    "max_era": 1,
+    "required_buildings": ["grove"],
+    "stock_conditions": [
+      { "item": "minecraft:oak_log", "min": 0, "max": 20 }
+    ]
+  },
+
+  "conditions": [
+    { "type": "DELIVERY", "item": "minecraft:oak_log", "required": 12, "send_to_stock": true }
+  ],
+  "reward": { "type": "PLAYER", "item": "minecraft:emerald", "amount": 2 }
+}

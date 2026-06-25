@@ -1,0 +1,22 @@
+{
+  "from_era": 2,
+  "from_orientation": "rural",
+  "orientation_label": "Rural",
+  "structure_label": "Village",
+  "icon_item": "minecraft:bread",
+
+  "min_weight_percent": 90,
+  "weight_cap_increase": 10,
+
+  "resource_cost": [
+    { "item": "minecraft:oak_log", "amount": 64 },
+    { "item": "minecraft:cobblestone", "amount": 35 }
+  ],
+
+  "required_residents": 5,
+  "required_buildings": [
+    { "defId": "granary", "count": 1 }
+  ],
+
+  "next_orientation": "rural"
+}

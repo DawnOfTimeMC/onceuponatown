@@ -14,7 +14,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.BlockItem;
 import org.dawnoftime.onceuponatown.command.TownCommand;
 import org.dawnoftime.onceuponatown.datapack.BuilderConfigDataHandler;
-import org.dawnoftime.onceuponatown.datapack.QuestConfigDataHandler;
 import org.dawnoftime.onceuponatown.datapack.BuildingDataHandler;
 import org.dawnoftime.onceuponatown.datapack.BuildingListDataHandler;
 import org.dawnoftime.onceuponatown.datapack.EraTransitionDataHandler;
@@ -24,12 +23,12 @@ import org.dawnoftime.onceuponatown.datapack.TradePriceDataHandler;
 import org.dawnoftime.onceuponatown.entity.Npc;
 import org.dawnoftime.onceuponatown.network.C2SAdvanceEraPacket;
 import org.dawnoftime.onceuponatown.network.C2SBuyPacket;
-import org.dawnoftime.onceuponatown.network.C2SClaimQuestPacket;
 import org.dawnoftime.onceuponatown.network.C2SDepositPacket;
-import org.dawnoftime.onceuponatown.network.C2SQuestDeliverPacket;
+import org.dawnoftime.onceuponatown.network.C2SContributeQuestPacket;
 import org.dawnoftime.onceuponatown.network.C2SQueueBuildingPacket;
 import org.dawnoftime.onceuponatown.network.C2SRemoveQueuedBuildingPacket;
 import org.dawnoftime.onceuponatown.network.C2SRequestStockPacket;
+import org.dawnoftime.onceuponatown.network.C2SToggleChatBroadcastPacket;
 import org.dawnoftime.onceuponatown.network.C2SUpgradeBuildingPacket;
 import org.dawnoftime.onceuponatown.network.S2CBuildingDefsPacket;
 import org.dawnoftime.onceuponatown.network.S2CBuildingListPacket;
@@ -62,7 +61,6 @@ public class OuatFabric implements ModInitializer {
         CommandRegistrationCallback.EVENT.register((dispatcher, context, env) ->
             TownCommand.register(dispatcher, context));
         ServerLifecycleEvents.SERVER_STARTING.register(BuilderConfigDataHandler::reload);
-        ServerLifecycleEvents.SERVER_STARTING.register(QuestConfigDataHandler::reload);
         ServerLifecycleEvents.SERVER_STARTING.register(BuildingDataHandler::reload);
         ServerLifecycleEvents.SERVER_STARTING.register(BuildingListDataHandler::reload);
         ServerLifecycleEvents.SERVER_STARTING.register(EraTransitionDataHandler::reload);
@@ -100,15 +98,10 @@ public class OuatFabric implements ModInitializer {
                 C2SDepositPacket packet = C2SDepositPacket.decode(buf);
                 server.execute(() -> C2SDepositPacket.Handler.handle(packet, player));
             });
-        ServerPlayNetworking.registerGlobalReceiver(C2SClaimQuestPacket.ID,
+        ServerPlayNetworking.registerGlobalReceiver(C2SContributeQuestPacket.ID,
             (server, player, handler, buf, responseSender) -> {
-                C2SClaimQuestPacket packet = C2SClaimQuestPacket.decode(buf);
-                server.execute(() -> C2SClaimQuestPacket.Handler.handle(packet, player));
-            });
-        ServerPlayNetworking.registerGlobalReceiver(C2SQuestDeliverPacket.ID,
-            (server, player, handler, buf, responseSender) -> {
-                C2SQuestDeliverPacket packet = C2SQuestDeliverPacket.decode(buf);
-                server.execute(() -> C2SQuestDeliverPacket.Handler.handle(packet, player));
+                C2SContributeQuestPacket packet = C2SContributeQuestPacket.decode(buf);
+                server.execute(() -> C2SContributeQuestPacket.Handler.handle(packet, player));
             });
         ServerPlayNetworking.registerGlobalReceiver(C2SRequestStockPacket.ID,
             (server, player, handler, buf, responseSender) -> {
@@ -119,6 +112,11 @@ public class OuatFabric implements ModInitializer {
             (server, player, handler, buf, responseSender) -> {
                 C2SBuyPacket packet = C2SBuyPacket.decode(buf);
                 server.execute(() -> C2SBuyPacket.Handler.handle(packet, player));
+            });
+        ServerPlayNetworking.registerGlobalReceiver(C2SToggleChatBroadcastPacket.ID,
+            (server, player, handler, buf, responseSender) -> {
+                C2SToggleChatBroadcastPacket packet = C2SToggleChatBroadcastPacket.decode(buf);
+                server.execute(() -> C2SToggleChatBroadcastPacket.Handler.handle(packet, player));
             });
         NetworkHelper.sendBuildingDefsPacket = (player, data) -> {
             var buf = PacketByteBufs.create();

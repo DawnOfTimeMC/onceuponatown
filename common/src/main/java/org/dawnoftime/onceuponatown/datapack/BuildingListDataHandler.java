@@ -38,7 +38,6 @@ public class BuildingListDataHandler {
             break;
         }
         ORDER = Collections.unmodifiableList(newOrder);
-        LOGGER.info("[OUAT] Loaded building list order: {} entries", ORDER.size());
     }
 
     public static List<String> getOrder() {

@@ -1,0 +1,109 @@
+{
+  "id": "wheat_farm",
+  "nbt": "onceuponatown:plains/jobs/wheat_farm",
+  "entry_pool": "onceuponatown:jobs",
+  "icon_item": "minecraft:bread",
+  "category": "jobs",
+  "weight": 3,
+
+  "required_buildings": [
+    { "defId": "wild_crops", "count": 2 },
+    { "defId": "wheat_field", "count": 2 }
+  ],
+  "construction_cost": [
+    {
+      "item": "minecraft:oak_log",
+      "amount": 35
+    },
+    {
+      "item": "minecraft:wheat_seeds",
+      "amount": 35
+    },
+    {
+      "item": "minecraft:cobblestone",
+      "amount": 10
+    }
+  ],
+  "production": [
+    {
+      "item": "minecraft:wheat_seeds",
+      "amount": 1,
+      "every_ticks": 1800,
+      "capacity_stacks": 1
+    },
+    {
+      "item": "minecraft:wheat",
+      "amount": 1,
+      "every_ticks": 1600,
+      "capacity_stacks": 1
+    }
+  ],
+  "transform_input_ratio": 0.1,
+  "transform_every_ticks": 1600,
+  "transformations": [
+    {
+      "inputs": [
+        { "item": "minecraft:wheat", "amount": 3 }
+      ],
+      "output": "minecraft:bread",
+      "output_amount": 1,
+      "output_capacity_stacks": 1
+    },
+    {
+      "inputs": [
+        { "item": "minecraft:potato", "amount": 3 },
+        { "item": "minecraft:charcoal", "amount": 1 }
+      ],
+      "output": "minecraft:baked_potato",
+      "output_amount": 3,
+      "output_capacity_stacks": 1,
+      "unlock_at_level": 1
+    },
+    {
+      "inputs": [
+        { "item": "minecraft:wheat_seeds", "amount": 25 }
+      ],
+      "output": "minecraft:bone_meal",
+      "output_amount": 1,
+      "output_capacity_stacks": 1,
+      "unlock_at_level": 2
+    }
+  ],
+  "upgrades": [
+    {
+      "capacity_stacks_add": 1,
+      "unlocks_display": ["minecraft:baked_potato"],
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 20 }]
+    },
+    {
+      "amount_add": 1,
+      "unlocks_display": ["minecraft:bone_meal"],
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 30 }]
+    },
+    {
+      "capacity_stacks_add": 1,
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 40 }]
+    },
+    {
+      "cadence_multiplier": 0.10,
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 60 }]
+    },
+    {
+      "amount_add": 1,
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 80 }]
+    },
+    {
+      "capacity_stacks_add": 1,
+      "cadence_multiplier": 0.20,
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 100 }]
+    }
+  ],
+  "nbt_levels": [
+    "onceuponatown:plains/jobs/wheat_farm_lvl1",
+    "onceuponatown:plains/jobs/wheat_farm_lvl2",
+    "onceuponatown:plains/jobs/wheat_farm_lvl3",
+    "onceuponatown:plains/jobs/wheat_farm_lvl4",
+    "onceuponatown:plains/jobs/wheat_farm_lvl5",
+    "onceuponatown:plains/jobs/wheat_farm_lvl6"
+  ]
+}

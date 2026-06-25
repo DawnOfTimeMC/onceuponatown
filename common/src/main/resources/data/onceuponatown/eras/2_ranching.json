@@ -4,7 +4,6 @@
   "orientation_label": "Ranching",
   "structure_label": "Village",
   "icon_item": "minecraft:saddle",
-  "max_active_quests": 2,
 
   "min_weight_percent": 90,
   "weight_cap_increase": 10,
@@ -19,7 +18,7 @@
     { "defId": "oven", "count": 1 },
     { "defId": "cow_field", "count": 1 }
   ],
-  "unlocked_building_ids": ["leather_workshop", "pig_farm", "lone_place"],
+  "unlocked_building_ids": ["leather_workshop", "pig_farm", "carpenter", "lone_place"],
   "unlock_new_builder": true,
 
   "next_orientation": "ranching"

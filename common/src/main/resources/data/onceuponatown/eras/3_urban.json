@@ -1,0 +1,22 @@
+{
+  "from_era": 2,
+  "from_orientation": "urban",
+  "orientation_label": "Urban",
+  "structure_label": "Village",
+  "icon_item": "minecraft:emerald",
+
+  "min_weight_percent": 90,
+  "weight_cap_increase": 10,
+
+  "resource_cost": [
+    { "item": "minecraft:oak_log", "amount": 64 },
+    { "item": "minecraft:cobblestone", "amount": 35 }
+  ],
+
+  "required_residents": 8,
+  "required_buildings": [
+    { "defId": "merchant_shop", "count": 1 }
+  ],
+
+  "next_orientation": "urban"
+}

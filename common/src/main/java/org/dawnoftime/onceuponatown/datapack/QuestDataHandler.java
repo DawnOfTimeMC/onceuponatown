@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class QuestDataHandler {
 
@@ -39,20 +40,18 @@ public class QuestDataHandler {
                     LOGGER.error("[OUAT] Failed to load quest def {}: {}", location, e.getMessage());
                 }
             });
-        LOGGER.info("[OUAT] Loaded {} quest definitions: {}", REGISTRY.size(), REGISTRY.keySet());
     }
 
     private static QuestDef parseDef(JsonObject json) {
         String id = json.get("id").getAsString();
         String type = json.has("type") ? json.get("type").getAsString() : "TASK";
-        String icon = json.get("icon").getAsString();
         String titleKey = json.get("title").getAsString();
         String descKey = json.get("description").getAsString();
-        int spawnWeight = json.has("spawn_weight") ? json.get("spawn_weight").getAsInt() : 10;
-        if (!json.has("duration_ticks")) {
-            throw new IllegalArgumentException("Quest '" + id + "' is missing required field 'duration_ticks'");
-        }
-        long durationTicks = json.get("duration_ticks").getAsLong();
+
+        // refresh_interval_ticks only applies to TASK quests; default 4500 if omitted
+        long refreshIntervalTicks = json.has("refresh_interval_ticks")
+            ? json.get("refresh_interval_ticks").getAsLong()
+            : 4500L;
 
         List<QuestDef.ConditionTemplate> conditions = new ArrayList<>();
         if (json.has("conditions")) {
@@ -77,9 +76,51 @@ public class QuestDataHandler {
             );
         }
 
-        return new QuestDef(id, type, icon, titleKey, descKey, conditions, reward, spawnWeight, durationTicks);
+        QuestDef.Prerequisites prerequisites = QuestDef.Prerequisites.NONE;
+        if (json.has("prerequisites")) {
+            prerequisites = parsePrerequisites(json.getAsJsonObject("prerequisites"));
+        }
+
+        return new QuestDef(id, type, titleKey, descKey, conditions, reward, refreshIntervalTicks, prerequisites);
+    }
+
+    private static QuestDef.Prerequisites parsePrerequisites(JsonObject json) {
+        int minEra = json.has("min_era") ? json.get("min_era").getAsInt() : 0;
+        int maxEra = json.has("max_era") ? json.get("max_era").getAsInt() : Integer.MAX_VALUE;
+
+        List<String> requiredBuildings = new ArrayList<>();
+        if (json.has("required_buildings")) {
+            for (JsonElement el : json.getAsJsonArray("required_buildings")) {
+                requiredBuildings.add(el.getAsString());
+            }
+        }
+
+        int minResidents = json.has("min_residents") ? json.get("min_residents").getAsInt() : 0;
+        int maxResidents = json.has("max_residents") ? json.get("max_residents").getAsInt() : Integer.MAX_VALUE;
+
+        List<String> requiredOrientations = new ArrayList<>();
+        if (json.has("required_orientations")) {
+            for (JsonElement el : json.getAsJsonArray("required_orientations")) {
+                requiredOrientations.add(el.getAsString());
+            }
+        }
+
+        List<QuestDef.StockCondition> stockConditions = new ArrayList<>();
+        if (json.has("stock_conditions")) {
+            for (JsonElement el : json.getAsJsonArray("stock_conditions")) {
+                JsonObject sc = el.getAsJsonObject();
+                String item = sc.get("item").getAsString();
+                int min = sc.has("min") ? sc.get("min").getAsInt() : 0;
+                int max = sc.has("max") ? sc.get("max").getAsInt() : Integer.MAX_VALUE;
+                stockConditions.add(new QuestDef.StockCondition(item, min, max));
+            }
+        }
+
+        return new QuestDef.Prerequisites(minEra, maxEra, requiredBuildings, minResidents, maxResidents,
+            requiredOrientations, stockConditions);
     }
 
     public static Optional<QuestDef> get(String id) { return Optional.ofNullable(REGISTRY.get(id)); }
     public static Collection<QuestDef> getAll() { return REGISTRY.values(); }
+    public static Set<String> getRegistryKeySet() { return REGISTRY.keySet(); }
 }

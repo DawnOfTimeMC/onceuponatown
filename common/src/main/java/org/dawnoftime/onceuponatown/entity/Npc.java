@@ -7,6 +7,8 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
@@ -150,12 +152,14 @@ public class Npc extends PathfinderMob {
             });
     }
 
-    // --- Debug immortality ---
+    @Override
+    protected SoundEvent getAmbientSound() { return SoundEvents.VILLAGER_AMBIENT; }
 
     @Override
-    public boolean hurt(DamageSource source, float amount) {
-        return false;
-    }
+    protected SoundEvent getHurtSound(DamageSource source) { return SoundEvents.VILLAGER_HURT; }
+
+    @Override
+    protected SoundEvent getDeathSound() { return SoundEvents.VILLAGER_DEATH; }
 
     @Override
     public boolean causeFallDamage(float fallDistance, float multiplier, DamageSource source) {
@@ -174,7 +178,7 @@ public class Npc extends PathfinderMob {
 
     @Override
     public boolean canBreatheUnderwater() {
-        return true;
+        return false;
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -192,6 +196,7 @@ public class Npc extends PathfinderMob {
         setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(net.minecraft.world.item.Items.MAP));
         readingTicksRemaining = durationTicks;
         entityData.set(DATA_IS_READING, true);
+        playSound(SoundEvents.BOOK_PAGE_TURN, 0.6f, 0.9f + getRandom().nextFloat() * 0.2f);
     }
 
     public void holdInOffHand(ItemStack stack) { setItemInHand(InteractionHand.OFF_HAND, stack); }

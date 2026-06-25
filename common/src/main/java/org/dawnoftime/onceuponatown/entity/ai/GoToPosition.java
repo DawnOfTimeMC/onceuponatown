@@ -11,8 +11,6 @@ public class GoToPosition {
     private BlockPos target;
     private final double speed;
     private final double arrivalRadius;
-    private int totalTicks = 0;
-
     public GoToPosition(Npc npc, BlockPos target, double speed, double arrivalRadius) {
         this.npc = npc;
         this.target = target;
@@ -29,7 +27,6 @@ public class GoToPosition {
 
     // Returns true when the NPC has reached the target.
     public boolean tick() {
-        totalTicks++;
         double distSq = npc.distanceToSqr(Vec3.atCenterOf(target));
         if (distSq <= arrivalRadius * arrivalRadius) {
             npc.getNavigation().stop();

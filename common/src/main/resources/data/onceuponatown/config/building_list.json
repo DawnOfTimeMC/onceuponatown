@@ -8,6 +8,7 @@
 
     "wild_crops",
     "wheat_field",
+    "wheat_farm",
     "carrot_field",
     "potato_field",
     "granary",
@@ -30,6 +31,8 @@
     "lumberjack",
 
     "workshop",
+    "carpenter",
+
     "oven",
     "kitchen",
 
@@ -38,7 +41,6 @@
     "house",
     "house_2",
     "house_3",
-    "house_4",
 
     "well",
     "wild_spot",

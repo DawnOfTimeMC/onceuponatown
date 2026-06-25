@@ -4,9 +4,12 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.Blocks;
 import org.dawnoftime.onceuponatown.building.schematic.BuildSchematic;
 import org.dawnoftime.onceuponatown.building.schematic.SchematicBlock;
+import org.dawnoftime.onceuponatown.building.schematic.SchematicEntity;
 import org.dawnoftime.onceuponatown.entity.Npc;
 import org.dawnoftime.onceuponatown.town.BuildingDef;
 import org.dawnoftime.onceuponatown.town.ConnectionPoint;
@@ -100,6 +103,25 @@ public class UpgradeAction implements BuildAction {
             for (ConnectionPoint cp : newPoints) {
                 if (existing.stream().noneMatch(e -> e.pos().equals(cp.pos()))) {
                     town.addFreeConnection(cp);
+                }
+            }
+
+            ResourceLocation fromNbt = (fromLevel == 0)
+                ? def.nbt
+                : (fromLevel - 1 < def.nbtLevels.size() ? def.nbtLevels.get(fromLevel - 1).nbt() : null);
+            if (fromNbt != null) {
+                List<SchematicEntity> toSpawn = BuildSchematic.computeEntityDiff(
+                    level, fromNbt, newNbtLevel.nbt(), building.rotation, building.worldPos, undergroundDepth);
+                for (SchematicEntity se : toSpawn) {
+                    EntityType.by(se.nbt()).ifPresent(type -> {
+                        Entity entity = type.create(level);
+                        if (entity != null) {
+                            entity.load(se.nbt());
+                            entity.moveTo(se.worldPos().x, se.worldPos().y, se.worldPos().z,
+                                          entity.getYRot(), entity.getXRot());
+                            level.addFreshEntity(entity);
+                        }
+                    });
                 }
             }
         }

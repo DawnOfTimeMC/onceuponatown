@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:cooked_porkchop",
   "category": "jobs",
+  "weight": 3,
+
   "herd": 2,
   "consumption_per_herd": 1.0,
   "required_buildings": [

@@ -4,7 +4,6 @@
   "orientation_label": "Forge",
   "structure_label": "Village",
   "icon_item": "minecraft:anvil",
-  "max_active_quests": 2,
 
   "min_weight_percent": 90,
   "weight_cap_increase": 10,
@@ -18,7 +17,7 @@
   "required_buildings": [
     { "defId": "wild_stone", "count": 2 }
   ],
-  "unlocked_building_ids": ["lone_place"],
+  "unlocked_building_ids": ["carpenter", "lone_place"],
   "unlock_new_builder": true,
 
   "next_orientation": "forge"

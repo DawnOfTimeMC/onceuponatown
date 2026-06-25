@@ -2,10 +2,14 @@
   "id": "lumberjack",
   "nbt": "onceuponatown:plains/jobs/lumberjack",
   "entry_pool": "onceuponatown:jobs",
-  "icon_item": "minecraft:stone_axe",
+  "icon_item": "minecraft:wooden_axe",
   "category": "jobs",
+  "weight": 3,
+
   "required_buildings": [
-    { "defId": "grove", "count": 2 }
+    { "defId": "grove", "count": 2 },
+    { "defId": "workshop", "count": 1 }
+
   ],
   "construction_cost": [
     {

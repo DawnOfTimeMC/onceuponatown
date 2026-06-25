@@ -15,5 +15,6 @@ public record ActiveBuildState(
     String connectionTarget,
     BlockPos entryConnectorPos,
     List<ItemCost> cost,
-    String queueDefId
+    String queueDefId,
+    long queueEntryId
 ) {}

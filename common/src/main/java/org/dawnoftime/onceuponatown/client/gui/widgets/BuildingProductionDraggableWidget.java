@@ -49,7 +49,15 @@ public class BuildingProductionDraggableWidget extends DraggableWidget {
                 rowY += HEADER_ROW_H;
             } else {
                 g.renderFakeItem(row.stack(), cx + 2, rowY);
-                g.drawString(font, row.text(), cx + 20, rowY + 4, 0xFFAAAAAA, false);
+                if (row.locked()) {
+                    g.pose().pushPose();
+                    g.pose().translate(0, 0, 200);
+                    NbtPreviewWidget.drawPadlockIcon(g, cx + 2 + 4, rowY + 3);
+                    g.pose().popPose();
+                    g.drawString(font, row.text(), cx + 20, rowY + 4, 0xFF666666, false);
+                } else {
+                    g.drawString(font, row.text(), cx + 20, rowY + 4, 0xFFAAAAAA, false);
+                }
                 rowY += ITEM_ROW_H;
             }
         }

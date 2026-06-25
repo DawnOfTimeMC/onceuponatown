@@ -2,64 +2,23 @@ package org.dawnoftime.onceuponatown.town;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import org.dawnoftime.onceuponatown.datapack.QuestDataHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 public class QuestManager {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(QuestManager.class);
-
-    // Tries to generate one new quest. Returns null if at cap or no eligible defs.
-    public static Quest tryGenerate(List<Quest> activeQuests, Set<String> dismissedNoteIds, long gameTime, int maxActiveQuests) {
-        if (activeQuests.size() >= maxActiveQuests) return null;
-        List<QuestDef> allDefs = new ArrayList<>(QuestDataHandler.getAll());
-        if (allDefs.isEmpty()) return null;
-
-        Set<String> activeDefIds = new HashSet<>();
-        for (Quest q : activeQuests) activeDefIds.add(q.defId);
-
-        List<QuestDef> eligible = new ArrayList<>();
-        for (QuestDef def : allDefs) {
-            if (activeDefIds.contains(def.id())) continue;
-            if ("NOTE".equals(def.type()) && dismissedNoteIds.contains(def.id())) continue;
-            eligible.add(def);
-        }
-        if (eligible.isEmpty()) return null;
-
-        int totalWeight = 0;
-        for (QuestDef def : eligible) totalWeight += Math.max(1, def.spawnWeight());
-        int roll = (int)(Math.random() * totalWeight);
-        QuestDef chosen = eligible.get(eligible.size() - 1);
-        for (QuestDef def : eligible) {
-            roll -= Math.max(1, def.spawnWeight());
-            if (roll < 0) { chosen = def; break; }
-        }
-
-        Quest q = buildFromDef(chosen, gameTime);
-        LOGGER.info("[OUAT] Generated quest {} ({}) weight={}", q.questId, q.defId, chosen.spawnWeight());
-        return q;
-    }
-
-    private static Quest buildFromDef(QuestDef def, long gameTime) {
+    // Builds and returns a Quest instance for the given def. Always succeeds.
+    public static Quest buildFromDef(QuestDef def) {
         Quest q = new Quest();
         q.questId = UUID.randomUUID().toString().substring(0, 8);
         q.defId = def.id();
         q.questType = def.type() != null ? def.type() : "TASK";
-        q.expiryTime = gameTime + def.durationTicks();
         for (QuestDef.ConditionTemplate ct : def.conditions()) {
             Quest.Condition c = new Quest.Condition();
             c.type = ct.type();
             if (ct.item() != null) c.item = BuiltInRegistries.ITEM.get(new ResourceLocation(ct.item()));
             c.required = ct.required();
-            c.received = 0;
             c.sendToStock = ct.sendToStock();
             q.conditions.add(c);
         }
@@ -71,5 +30,13 @@ public class QuestManager {
             q.reward = r;
         }
         return q;
+    }
+
+    // Returns true if the given def already has an active quest instance in this town.
+    public static boolean isAlreadyActive(QuestDef def, List<Quest> activeQuests) {
+        for (Quest q : activeQuests) {
+            if (q.defId.equals(def.id())) return true;
+        }
+        return false;
     }
 }

@@ -1,0 +1,86 @@
+{
+  "id": "carpenter",
+  "nbt": "onceuponatown:plains/jobs/carpenter",
+  "entry_pool": "onceuponatown:jobs",
+  "icon_item": "minecraft:chiseled_bookshelf",
+  "category": "jobs",
+  "weight": 3,
+
+  "required_buildings": [
+    { "defId": "grove", "count": 2 },
+    { "defId": "workshop", "count": 1 },
+    { "defId": "sheep_field", "count": 1 }
+
+  ],
+  "construction_cost": [
+    {
+      "item": "minecraft:oak_log",
+      "amount": 35
+    },
+    {
+      "item": "minecraft:cobblestone",
+      "amount": 10
+    }
+  ],
+  "transform_input_ratio": 0.1,
+  "transform_every_ticks": 1600,
+  "transformations": [
+    {
+      "inputs": [
+        { "item": "minecraft:oak_planks", "amount": 3 },
+        { "item": "minecraft:white_wool", "amount": 3 }
+      ],
+      "output": "minecraft:white_bed",
+      "output_amount": 1,
+      "output_capacity_stacks": 1
+    },
+    {
+      "inputs": [
+        { "item": "minecraft:oak_planks", "amount": 6 },
+        { "item": "minecraft:oak_slab", "amount": 3 }
+      ],
+      "output": "minecraft:chiseled_bookshelf",
+      "output_amount": 1,
+      "output_capacity_stacks": 1,
+      "unlock_at_level": 1
+    }
+  ],
+  "upgrades": [
+    {
+      "capacity_stacks_add": 1,
+      "unlocks_display": ["minecraft:chiseled_bookshelf"],
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 20 }]
+    },
+    {
+      "amount_add": 1,
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 30 }]
+    },
+    {
+      "capacity_stacks_add": 1,
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 40 }]
+    },
+    {
+      "cadence_multiplier": 0.10,
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 60 }]
+    },
+    {
+      "amount_add": 1,
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 80 }]
+    },
+    {
+      "capacity_stacks_add": 1,
+      "cadence_multiplier": 0.20,
+      "upgrade_cost": [{ "item": "minecraft:oak_log", "amount": 100 }]
+    }
+  ],
+  "nbt_levels": [
+    "onceuponatown:plains/jobs/carpenter_lvl1",
+    "onceuponatown:plains/jobs/carpenter_lvl2",
+    "onceuponatown:plains/jobs/carpenter_lvl3",
+    "onceuponatown:plains/jobs/carpenter_lvl4",
+    "onceuponatown:plains/jobs/carpenter_lvl5",
+    "onceuponatown:plains/jobs/carpenter_lvl6",
+    "onceuponatown:plains/jobs/carpenter_lvl7"
+
+  ]
+}

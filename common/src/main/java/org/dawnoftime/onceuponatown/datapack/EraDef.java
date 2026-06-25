@@ -1,7 +1,6 @@
 package org.dawnoftime.onceuponatown.datapack;
 
 import java.util.List;
-import java.util.Map;
 
 public class EraDef {
     public final int era;
@@ -14,19 +13,14 @@ public class EraDef {
     // defId of the starter building placed at world gen that triggers this era state
     public final String starterBuildingId;
     public final List<String> boostedBuildings;
-    // Weight cost per building category (natural, buildings, gardens, jobs, ...)
-    public final Map<String, Integer> categoryWeights;
     // Starting weight cap for this orientation (increases with each era transition)
     public final int initialMaxWeight;
     // Production multiplier stamped on boosted buildings at placement time (default 1.0 = no bonus)
     public final double boostMultiplier;
-    // Maximum number of active quests allowed in this orientation (configurable per era file).
-    public final int maxActiveQuests;
 
     public EraDef(int era, String orientation, String orientationLabel, String structureLabel,
                   String iconItem, String starterBuildingId, List<String> boostedBuildings,
-                  Map<String, Integer> categoryWeights, int initialMaxWeight, double boostMultiplier,
-                  int maxActiveQuests) {
+                  int initialMaxWeight, double boostMultiplier) {
         this.era = era;
         this.orientation = orientation;
         this.orientationLabel = orientationLabel;
@@ -34,9 +28,7 @@ public class EraDef {
         this.iconItem = iconItem;
         this.starterBuildingId = starterBuildingId;
         this.boostedBuildings = boostedBuildings;
-        this.categoryWeights = categoryWeights;
         this.initialMaxWeight = initialMaxWeight;
         this.boostMultiplier = boostMultiplier;
-        this.maxActiveQuests = maxActiveQuests;
     }
 }

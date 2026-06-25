@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:gardens",
   "icon_item": "minecraft:bell",
   "category": "gardens",
+  "weight": 4,
+
   "production_bonus": 0.05,
   "required_residents": 10,
   "construction_cost": [

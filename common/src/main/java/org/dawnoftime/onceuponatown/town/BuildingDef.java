@@ -55,6 +55,8 @@ public class BuildingDef {
     public final float consumptionPerResident;
     // Items injected into the town stock when this building is placed as the village starter. Empty for non-starters.
     public final List<ItemCost> initialStock;
+    // Weight units this building consumes from the era cap when placed or queued.
+    public final int weight;
 
     // One upgrade step: cost + what it changes. All fields are additive deltas.
     public record UpgradeLevel(float cadenceMultiplier, int capacityStacksAdd, int amountAdd,
@@ -83,7 +85,7 @@ public class BuildingDef {
                        List<UpgradeLevel> upgrades, List<NbtLevel> nbtLevels,
                        int requiredResidents, List<BuildingRequirement> requiredBuildings,
                        float consumptionPerResident, List<ItemCost> initialStock,
-                       int herd, float consumptionPerHerd) {
+                       int herd, float consumptionPerHerd, int weight) {
         this.id = id;
         this.nbt = nbt;
         this.entryPool = entryPool;
@@ -107,6 +109,7 @@ public class BuildingDef {
         this.initialStock = initialStock;
         this.herd = herd;
         this.consumptionPerHerd = consumptionPerHerd;
+        this.weight = weight;
     }
 
     // Returns effective production, cadence, residents, consumption, herd, and herd consumption at a given upgrade level.

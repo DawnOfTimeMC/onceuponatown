@@ -4,6 +4,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.client.renderer.MultiBufferSource;
+import org.dawnoftime.onceuponatown.client.gui.widgets.NbtPreviewWidget;
 import org.joml.Matrix4f;
 
 public class ClientBuildingProductionTooltip implements ClientTooltipComponent {
@@ -14,6 +15,8 @@ public class ClientBuildingProductionTooltip implements ClientTooltipComponent {
     private static final int COLOR_HEADER  = 0xFF55FF55;
     /** ARGB light-gray used for regular item and perk rows. */
     private static final int COLOR_CONTENT = 0xFFAAAAAA;
+    /** ARGB dark-gray used for locked item rows. */
+    private static final int COLOR_LOCKED  = 0xFF666666;
 
     private final BuildingProductionTooltip data;
 
@@ -41,9 +44,11 @@ public class ClientBuildingProductionTooltip implements ClientTooltipComponent {
     public void renderImage(Font font, int x, int y, GuiGraphics graphics) {
         for (int i = 0; i < data.rows().size(); i++) {
             BuildingProductionTooltip.Row row = data.rows().get(i);
-            // Header rows have no icon.
             if (!row.isHeader()) {
                 graphics.renderItem(row.stack(), x, y + i * ROW_HEIGHT + 1);
+                if (row.locked()) {
+                    NbtPreviewWidget.drawPadlockIcon(graphics, x + 4, y + i * ROW_HEIGHT + 4);
+                }
             }
         }
     }
@@ -54,7 +59,7 @@ public class ClientBuildingProductionTooltip implements ClientTooltipComponent {
             BuildingProductionTooltip.Row row = data.rows().get(i);
             // Headers start at x with no icon offset and use green color.
             int textX = row.isHeader() ? x : x + ICON_SIZE + GAP;
-            int color  = row.isHeader() ? COLOR_HEADER : COLOR_CONTENT;
+            int color  = row.isHeader() ? COLOR_HEADER : (row.locked() ? COLOR_LOCKED : COLOR_CONTENT);
             font.drawInBatch(
                 row.text().getVisualOrderText(),
                 textX,

@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:oak_planks",
   "category": "jobs",
+  "weight": 2,
+
   "required_buildings": [
     { "defId": "wild_stone", "count": 1 },
     { "defId": "grove", "count": 1 }

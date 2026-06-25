@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:honey_bottle",
   "category": "jobs",
+  "weight": 3,
+
   "required_buildings": [
     { "defId": "bee_field", "count": 1 }
   ],

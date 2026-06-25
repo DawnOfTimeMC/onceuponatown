@@ -38,18 +38,17 @@ import org.dawnoftime.onceuponatown.datapack.BuildingDataHandler;
 import org.dawnoftime.onceuponatown.datapack.BuildingListDataHandler;
 import org.dawnoftime.onceuponatown.datapack.EraTransitionDataHandler;
 import org.dawnoftime.onceuponatown.datapack.FoodListDataHandler;
-import org.dawnoftime.onceuponatown.datapack.QuestConfigDataHandler;
 import org.dawnoftime.onceuponatown.datapack.QuestDataHandler;
 import org.dawnoftime.onceuponatown.datapack.TradePriceDataHandler;
 import org.dawnoftime.onceuponatown.entity.Npc;
 import org.dawnoftime.onceuponatown.network.C2SAdvanceEraPacket;
 import org.dawnoftime.onceuponatown.network.C2SBuyPacket;
-import org.dawnoftime.onceuponatown.network.C2SClaimQuestPacket;
 import org.dawnoftime.onceuponatown.network.C2SDepositPacket;
-import org.dawnoftime.onceuponatown.network.C2SQuestDeliverPacket;
+import org.dawnoftime.onceuponatown.network.C2SContributeQuestPacket;
 import org.dawnoftime.onceuponatown.network.C2SQueueBuildingPacket;
 import org.dawnoftime.onceuponatown.network.C2SRemoveQueuedBuildingPacket;
 import org.dawnoftime.onceuponatown.network.C2SRequestStockPacket;
+import org.dawnoftime.onceuponatown.network.C2SToggleChatBroadcastPacket;
 import org.dawnoftime.onceuponatown.network.C2SUpgradeBuildingPacket;
 import org.dawnoftime.onceuponatown.network.NetworkHelper;
 import org.dawnoftime.onceuponatown.network.S2CBuildingDefsPacket;
@@ -229,18 +228,6 @@ public class OuatForge {
             Optional.of(NetworkDirection.PLAY_TO_SERVER)
         );
 
-        CHANNEL.registerMessage(8,
-            C2SClaimQuestPacket.class,
-            C2SClaimQuestPacket::encode,
-            C2SClaimQuestPacket::decode,
-            (msg, ctx) -> {
-                ctx.get().enqueueWork(() ->
-                    C2SClaimQuestPacket.Handler.handle(msg, ctx.get().getSender()));
-                ctx.get().setPacketHandled(true);
-            },
-            Optional.of(NetworkDirection.PLAY_TO_SERVER)
-        );
-
         CHANNEL.registerMessage(9,
             S2CStockUpdatePacket.class,
             S2CStockUpdatePacket::encode,
@@ -321,12 +308,12 @@ public class OuatForge {
         );
 
         CHANNEL.registerMessage(16,
-            C2SQuestDeliverPacket.class,
-            C2SQuestDeliverPacket::encode,
-            C2SQuestDeliverPacket::decode,
+            C2SContributeQuestPacket.class,
+            C2SContributeQuestPacket::encode,
+            C2SContributeQuestPacket::decode,
             (msg, ctx) -> {
                 ctx.get().enqueueWork(() ->
-                    C2SQuestDeliverPacket.Handler.handle(msg, ctx.get().getSender()));
+                    C2SContributeQuestPacket.Handler.handle(msg, ctx.get().getSender()));
                 ctx.get().setPacketHandled(true);
             },
             Optional.of(NetworkDirection.PLAY_TO_SERVER)
@@ -369,6 +356,24 @@ public class OuatForge {
 
         NetworkHelper.sendRequestStockPacket = pos ->
             CHANNEL.sendToServer(new C2SRequestStockPacket(pos));
+
+        CHANNEL.registerMessage(18,
+            C2SToggleChatBroadcastPacket.class,
+            C2SToggleChatBroadcastPacket::encode,
+            C2SToggleChatBroadcastPacket::decode,
+            (msg, ctx) -> {
+                ctx.get().enqueueWork(() ->
+                    C2SToggleChatBroadcastPacket.Handler.handle(msg, ctx.get().getSender()));
+                ctx.get().setPacketHandled(true);
+            },
+            Optional.of(NetworkDirection.PLAY_TO_SERVER)
+        );
+    }
+
+    // Called from OuatForgeClient to wire the toggle chat broadcast packet sender
+    static void wireToggleChatBroadcastPacket() {
+        NetworkHelper.sendToggleChatBroadcastPacket = pos ->
+            CHANNEL.sendToServer(new C2SToggleChatBroadcastPacket(pos));
     }
 
     // Called from OuatForgeClient to wire the buy packet sender
@@ -377,10 +382,10 @@ public class OuatForge {
             CHANNEL.sendToServer(new C2SBuyPacket(pos, items));
     }
 
-    // Called from OuatForgeClient to wire the quest deliver packet sender
-    static void wireQuestDeliverPacket() {
-        NetworkHelper.sendQuestDeliverPacket = (pos, questId, condIdx, amount) ->
-            CHANNEL.sendToServer(new C2SQuestDeliverPacket(pos, questId, condIdx, amount));
+    // Called from OuatForgeClient to wire the contribute quest packet sender
+    static void wireContributeQuestPacket() {
+        NetworkHelper.sendContributeQuestPacket = (pos, questId) ->
+            CHANNEL.sendToServer(new C2SContributeQuestPacket(pos, questId));
     }
 
     @SuppressWarnings("unchecked")
@@ -394,7 +399,6 @@ public class OuatForge {
 
     private void onServerStarting(ServerStartingEvent event) {
         BuilderConfigDataHandler.reload(event.getServer());
-        QuestConfigDataHandler.reload(event.getServer());
         BuildingDataHandler.reload(event.getServer());
         BuildingListDataHandler.reload(event.getServer());
         EraTransitionDataHandler.reload(event.getServer());

@@ -26,7 +26,6 @@ import org.dawnoftime.onceuponatown.client.renderer.NpcRenderer;
 import org.dawnoftime.onceuponatown.client.screen.TownHubScreen;
 import org.dawnoftime.onceuponatown.entity.Npc;
 import org.dawnoftime.onceuponatown.network.C2SAdvanceEraPacket;
-import org.dawnoftime.onceuponatown.network.C2SClaimQuestPacket;
 import org.dawnoftime.onceuponatown.network.C2SDepositPacket;
 import org.dawnoftime.onceuponatown.network.C2SQueueBuildingPacket;
 import org.dawnoftime.onceuponatown.network.C2SRemoveQueuedBuildingPacket;
@@ -71,10 +70,9 @@ public class OuatForgeClient {
                 OuatForge.CHANNEL.sendToServer(new C2SAdvanceEraPacket(pos, pathId));
             NetworkHelper.sendDepositPacket = pos ->
                 OuatForge.CHANNEL.sendToServer(new C2SDepositPacket(pos));
-            NetworkHelper.sendClaimQuestPacket = (pos, questId) ->
-                OuatForge.CHANNEL.sendToServer(new C2SClaimQuestPacket(pos, questId));
             OuatForge.wireBuyPacket();
-            OuatForge.wireQuestDeliverPacket();
+            OuatForge.wireContributeQuestPacket();
+            OuatForge.wireToggleChatBroadcastPacket();
         });
     }
 

@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:leather",
   "category": "jobs",
+  "weight": 3,
+
   "required_buildings": [
     { "defId": "cow_field", "count": 2 }
   ],

@@ -4,9 +4,11 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:furnace",
   "category": "jobs",
+  "weight": 2,
+
   "required_buildings": [
     { "defId": "workshop", "count": 1 },
-    { "defId": "wild_stone", "count": 1 }
+    { "defId": "pig_field", "count": 1 }
   ],
   "construction_cost": [
     {

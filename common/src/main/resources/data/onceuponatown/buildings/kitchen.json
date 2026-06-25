@@ -4,10 +4,12 @@
   "entry_pool": "onceuponatown:jobs",
   "icon_item": "minecraft:smoker",
   "category": "jobs",
+  "weight": 3,
+
   "required_buildings": [
     { "defId": "wild_crops", "count": 2 },
     { "defId": "cow_field", "count": 1 },
-    { "defId": "sheep_farm", "count": 1 }
+    { "defId": "sheep_field", "count": 1 }
   ],
   "construction_cost": [
     {

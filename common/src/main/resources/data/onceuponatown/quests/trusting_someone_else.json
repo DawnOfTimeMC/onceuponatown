@@ -1,0 +1,13 @@
+{
+  "id": "onceuponatown:trusting_someone_else",
+  "type": "NOTE",
+  "title": "quest.onceuponatown.trusting_someone_else.title",
+  "description": "quest.onceuponatown.trusting_someone_else.desc",
+
+  "prerequisites": {
+    "min_era": 1,
+    "stock_conditions": [
+      { "item": "minecraft:cobblestone", "min": 35 }
+    ]
+  }
+}

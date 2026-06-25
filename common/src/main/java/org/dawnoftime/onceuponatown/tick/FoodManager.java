@@ -76,10 +76,6 @@ public class FoodManager {
                 }
             }
             if (!drainCosts.isEmpty()) inv.removeStock(drainCosts);
-            BlockPos anchorPos = BlockPos.of(anchorKey);
-            TownLogEntry foodLog = new TownLogEntry(TownLogType.FOOD_CONSUMED, String.valueOf(toDrainUnits), level.getGameTime());
-            town.addLogEntry(foodLog);
-            NetworkHelper.pushLogEntryToWatchers(level, town, anchorPos, foodLog);
         }
 
         int prevActive = town.getActiveResidents();
@@ -91,6 +87,7 @@ public class FoodManager {
         for (Map.Entry<net.minecraft.world.item.Item, Integer> fEntry : FoodRegistry.herdEntriesInOrder()) {
             availableHerdFoodUnits += inv.getStock(fEntry.getKey()) * fEntry.getValue();
         }
+        int totalHerdDrained = 0;
         boolean herdChanged = false;
         for (PlacedBuilding building : town.getBuildings()) {
             BuildingDef def = BuildingDataHandler.get(building.getDefId()).orElse(null);
@@ -121,11 +118,20 @@ public class FoodManager {
                 }
                 if (!herdDrain.isEmpty()) inv.removeStock(herdDrain);
                 availableHerdFoodUnits -= demand;
+                totalHerdDrained += demand;
                 building.setHerdFed(true);
             } else {
                 building.setHerdFed(false);
             }
             if (building.isHerdFed() != wasFed) herdChanged = true;
+        }
+
+        int totalConsumed = toDrainUnits + totalHerdDrained;
+        if (totalConsumed > 0) {
+            BlockPos anchorPos = BlockPos.of(anchorKey);
+            TownLogEntry foodLog = new TownLogEntry(TownLogType.FOOD_CONSUMED, String.valueOf(totalConsumed), level.getGameTime());
+            town.addLogEntry(foodLog);
+            NetworkHelper.pushLogEntryToWatchers(level, town, anchorPos, foodLog);
         }
 
         LevelTowns.get(level).markDirty();

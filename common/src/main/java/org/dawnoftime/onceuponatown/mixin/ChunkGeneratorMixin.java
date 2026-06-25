@@ -25,8 +25,6 @@ import org.dawnoftime.onceuponatown.town.ConnectionPoint;
 import org.dawnoftime.onceuponatown.town.ItemCost;
 import org.dawnoftime.onceuponatown.town.LevelTowns;
 import org.dawnoftime.onceuponatown.town.Town;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -39,8 +37,6 @@ import java.util.Set;
 
 @Mixin(StructureStart.class)
 public class ChunkGeneratorMixin {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(ChunkGeneratorMixin.class);
 
     @Inject(
         method = "placeInChunk",
@@ -73,9 +69,6 @@ public class ChunkGeneratorMixin {
 
         // All level mutations must happen on the server thread, not the chunk-gen thread
         serverLevel.getServer().execute(() -> {
-            LOGGER.info("[OUAT-MIXIN] onStructurePlaced fired. BuildingDefs loaded: {}. Pieces: {}",
-                BuildingDataHandler.getAll().size(), self.getPieces().size());
-
             // Locate the town_anchor block that was pre-placed inside the settlement NBT.
             // The scan must run on the server thread since it reads level block data.
             BlockPos anchorPos = findAnchorInStructure(serverLevel, self);
@@ -168,8 +161,6 @@ public class ChunkGeneratorMixin {
 
             LevelTowns.get(serverLevel).registerTown(anchorPos, town);
             LevelTowns.get(serverLevel).markDirty();
-            LOGGER.info("[OUAT-MIXIN] Town registered at {}. Buildings: {}, FreeConnections: {}",
-                anchorPos, town.getBuildings().size(), town.getAvailableConnectionPoints().size());
         });
     }
 

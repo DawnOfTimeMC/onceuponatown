@@ -16,21 +16,13 @@ public class Quest {
         public String type;
         public Item item;
         public int required;
-        public int received;
         public boolean sendToStock = false;
-
-        public boolean isMet() {
-            if ("DELIVERY".equals(type)) return received >= required;
-            if ("NARRATIVE".equals(type)) return true;
-            return false;
-        }
 
         public CompoundTag toNbt() {
             CompoundTag tag = new CompoundTag();
             tag.putString("Type", type);
             if (item != null) tag.putString("Item", BuiltInRegistries.ITEM.getKey(item).toString());
             tag.putInt("Required", required);
-            tag.putInt("Received", received);
             if (sendToStock) tag.putBoolean("SendToStock", true);
             return tag;
         }
@@ -40,7 +32,6 @@ public class Quest {
             c.type = tag.getString("Type");
             if (tag.contains("Item")) c.item = BuiltInRegistries.ITEM.get(new ResourceLocation(tag.getString("Item")));
             c.required = tag.getInt("Required");
-            c.received = tag.getInt("Received");
             c.sendToStock = tag.contains("SendToStock") && tag.getBoolean("SendToStock");
             return c;
         }
@@ -71,20 +62,14 @@ public class Quest {
     public String questId;
     public String defId;
     public String questType = "TASK";
-    public long expiryTime;
     public final List<Condition> conditions = new ArrayList<>();
     public Reward reward;
-
-    public boolean allConditionsMet() {
-        return !conditions.isEmpty() && conditions.stream().allMatch(Condition::isMet);
-    }
 
     public CompoundTag toNbt() {
         CompoundTag tag = new CompoundTag();
         tag.putString("QuestId", questId);
         tag.putString("DefId", defId);
         tag.putString("QuestType", questType != null ? questType : "TASK");
-        tag.putLong("ExpiryTime", expiryTime);
         ListTag conds = new ListTag();
         for (Condition c : conditions) conds.add(c.toNbt());
         tag.put("Conditions", conds);
@@ -97,7 +82,6 @@ public class Quest {
         q.questId = tag.getString("QuestId");
         q.defId = tag.getString("DefId");
         q.questType = tag.contains("QuestType") ? tag.getString("QuestType") : "TASK";
-        q.expiryTime = tag.getLong("ExpiryTime");
         tag.getList("Conditions", Tag.TAG_COMPOUND).forEach(t -> q.conditions.add(Condition.fromNbt((CompoundTag) t)));
         if (tag.contains("Reward")) q.reward = Reward.fromNbt(tag.getCompound("Reward"));
         return q;

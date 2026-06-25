@@ -90,6 +90,23 @@ public class EraProgressDraggableWidget extends DraggableWidget {
         }
     }
 
+    public void updateResidents(int activeResidents) {
+        List<EraPathOption> updated = new ArrayList<>();
+        for (EraPathOption opt : pathOptions) {
+            boolean newResidentsMet = opt.requiredResidents() <= 0 || activeResidents >= opt.requiredResidents();
+            boolean resourcesMet = opt.resourceCost().stream().allMatch(cr -> cr.have() >= cr.amount());
+            boolean buildingsMet = opt.requiredBuildings().stream().allMatch(rb -> rb.have() >= rb.count());
+            boolean newPrereqsMet = opt.weightMet() && resourcesMet && newResidentsMet && buildingsMet;
+            updated.add(new EraPathOption(
+                opt.id(), opt.orientationLabel(), opt.iconItem(),
+                newPrereqsMet, opt.requiredWeight(), opt.currentWeight(), opt.maxWeight(), opt.weightMet(),
+                opt.resourceCost(), opt.requiredResidents(), activeResidents,
+                newResidentsMet, opt.requiredBuildings(), opt.unlocked()
+            ));
+        }
+        this.pathOptions = updated;
+    }
+
     // -------------------------------------------------------------------------
     // Layout computation
     // -------------------------------------------------------------------------

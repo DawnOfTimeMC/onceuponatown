@@ -4,6 +4,8 @@
   "entry_pool": "onceuponatown:gardens",
   "icon_item": "minecraft:oak_leaves",
   "category": "gardens",
+  "weight": 2,
+
   "production_bonus": 0.02,
   "required_residents": 2,
   "construction_cost": [
